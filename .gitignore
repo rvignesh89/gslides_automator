@@ -1,0 +1,7 @@
+__pycache__/
+venv/
+service-account-credentials.json
+dist/
+build/
+*.egg-info/
+.envrc

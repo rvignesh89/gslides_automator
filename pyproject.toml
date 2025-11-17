@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gslides_automator"
+version = "0.1.0"
+description = "Generate data and reports from Google Sheets and Drive"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "gspread>=5.0.0",
+    "google-auth>=2.0.0",
+    "google-auth-httplib2>=0.1.0",
+    "google-api-python-client>=2.0.0",
+    "pandas>=1.5.0",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.scripts]
+gslide_automator = "gslide_automator.cli:main"
+
+[project.optional-dependencies]
+dev = []
+
+[tool.setuptools]
+packages = ["gslide_automator"]
+
