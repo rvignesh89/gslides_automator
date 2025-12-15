@@ -1,6 +1,6 @@
-# Google Slide Automator
+# Google Slides Automator
 
-This repository contains a python package for generating multiple Google Slide reports in Google Drive by copying data from Google sheets. This package can be used to a automate pdf report generation by first modifying placeholders ({{placeholder}}) in a Google Slide with data and converting the slide to a report.
+This repository contains a python package / binary for generating multiple Google Slide reports in Google Drive by copying data from Google sheets. This package can be used to a automate pdf report generation by first modifying placeholders ({{placeholder}}) in a Google Slide with data and converting the slide to a report.
 
 Following elements in a slide can be replaced,
 1. Text placeholders in a paragraph
@@ -12,15 +12,20 @@ The real value of this package is the ability to generate a report for different
 
 ## Getting Started
 
-Requirements to running the reports are
+Requirements to running the reports are:
 
-1. Python 3.12.11
-2. Google Sheets, Slides and Drive API enabled service account credentials
+1. Python 3.12 or above.
+2. Google Sheets, Slides and Drive API enabled service account credentials.
 3. Access to Google Drive Shared Drive containing slide and data templates and L0 data.
 
 ### Service Account Setup
 
-1. Create a service account in Google Cloud Console
+1. Create a service account in Google Cloud Console with the following scopes:
+   - https://www.googleapis.com/auth/spreadsheets
+   - https://www.googleapis.com/auth/drive.readonly
+   - https://www.googleapis.com/auth/drive.file
+   - https://www.googleapis.com/auth/drive
+   - https://www.googleapis.com/auth/presentations
 2. Download the JSON key file and save it as `service-account-credentials.json` in the project root
 3. **Important**: Share all required Google Drive files and folders with the service account email (found in the JSON file as `client_email`) with **Editor** permissions
    - This includes all folders (L0-Data, L1-Data, output folders)

@@ -18,15 +18,15 @@ SCOPES = [
 
 # Get the project root directory
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SERVICE_ACCOUNT_FILE = os.path.join(PROJECT_ROOT, 'service-account-credentials.json')
+SERVICE_ACCOUNT_CREDENTIALS = os.path.join(PROJECT_ROOT, 'service-account-credentials.json')
 
 
-def get_oauth_credentials(service_account_file: str | None = None, scopes=None):
+def get_oauth_credentials(service_account_credentials: str | None = None, scopes=None):
     """
     Get service account credentials using a JSON key file. Defaults to service-account-credentials.json in repo root.
 
     Args:
-        service_account_file: Optional path to a service account key JSON.
+        service_account_credentials: Optional path to a service account key JSON.
         scopes: Optional list of scopes to request.
 
     Returns:
@@ -35,7 +35,7 @@ def get_oauth_credentials(service_account_file: str | None = None, scopes=None):
     Raises:
         FileNotFoundError: If the credentials file is not found
     """
-    key_path = service_account_file or SERVICE_ACCOUNT_FILE
+    key_path = service_account_credentials or SERVICE_ACCOUNT_CREDENTIALS
     if not os.path.exists(key_path):
         raise FileNotFoundError(
             f"Service account credentials file '{key_path}' not found. "
@@ -52,25 +52,25 @@ def get_oauth_credentials(service_account_file: str | None = None, scopes=None):
     return creds
 
 
-def load_credentials(service_account_file: str):
+def load_credentials(service_account_credentials: str):
     """
     Load service-account credentials from a provided path.
 
     Args:
-        service_account_file: Path to the service account JSON key file.
+        service_account_credentials: Path to the service account JSON key file.
 
     Returns:
         google.oauth2.service_account.Credentials: Service account credentials object
 
     Raises:
-        ValueError: If service_account_file is empty
+        ValueError: If service_account_credentials is empty
         FileNotFoundError: If the credentials file is not found
     """
-    if not service_account_file:
-        raise ValueError("service_account_file is required.")
-    if not os.path.exists(service_account_file):
-        raise FileNotFoundError(f"Credentials file not found: {service_account_file}")
-    return get_oauth_credentials(service_account_file=service_account_file, scopes=SCOPES)
+    if not service_account_credentials:
+        raise ValueError("service_account_credentials is required.")
+    if not os.path.exists(service_account_credentials):
+        raise FileNotFoundError(f"Credentials file not found: {service_account_credentials}")
+    return get_oauth_credentials(service_account_credentials=service_account_credentials, scopes=SCOPES)
 
 
 def get_service_account_email():
@@ -87,12 +87,12 @@ def get_service_account_email():
     """
     import json
 
-    if not os.path.exists(SERVICE_ACCOUNT_FILE):
+    if not os.path.exists(SERVICE_ACCOUNT_CREDENTIALS):
         raise FileNotFoundError(
-            f"Service account credentials file '{SERVICE_ACCOUNT_FILE}' not found."
+            f"Service account credentials file '{SERVICE_ACCOUNT_CREDENTIALS}' not found."
         )
 
-    with open(SERVICE_ACCOUNT_FILE, 'r') as f:
+    with open(SERVICE_ACCOUNT_CREDENTIALS, 'r') as f:
         creds_data = json.load(f)
 
     email = creds_data.get('client_email')

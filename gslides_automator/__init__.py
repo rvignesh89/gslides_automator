@@ -22,11 +22,11 @@ def _ensure_list(value) -> Optional[List[str]]:
 
 def generate_data(
     shared_drive_url: str,
-    service_account_file: str,
+    service_account_credentials: str,
     entities: Iterable[str] | str | None = None,
 ) -> dict:
     """Populate L1-Data from L0-Data using the shared-drive layout."""
-    creds = load_credentials(service_account_file)
+    creds = load_credentials(service_account_credentials)
     layout: DriveLayout = resolve_layout(shared_drive_url, creds)
 
     target_entities = _ensure_list(entities)
@@ -41,11 +41,11 @@ def generate_data(
 
 def generate_report(
     shared_drive_url: str,
-    service_account_file: str,
+    service_account_credentials: str,
     entities: Iterable[str] | str | None = None,
 ) -> dict:
     """Build Google Slides reports from L1-Data for selected entities/slides."""
-    creds = load_credentials(service_account_file)
+    creds = load_credentials(service_account_credentials)
     layout: DriveLayout = resolve_layout(shared_drive_url, creds)
 
     target_entities = _ensure_list(entities)

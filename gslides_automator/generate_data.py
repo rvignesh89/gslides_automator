@@ -897,7 +897,7 @@ def main():
         help='Shared Drive root URL or ID that contains L0/L1 data and templates.',
     )
     parser.add_argument(
-        '--service-account-file',
+        '--service-account-credentials',
         default=None,
         help='Path to the service account JSON key file.',
     )
@@ -914,7 +914,7 @@ def main():
     try:
         # Get credentials
         print("Authenticating...")
-        creds = get_oauth_credentials(service_account_file=args.service_account_file)
+        creds = get_oauth_credentials(service_account_credentials=args.service_account_credentials)
 
         layout = resolve_layout(args.shared_drive_url, creds)
 

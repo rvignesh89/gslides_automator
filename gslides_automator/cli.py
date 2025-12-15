@@ -11,7 +11,7 @@ def _run_generate_data(args: argparse.Namespace) -> int:
     """Entrypoint for the `generate-data` subcommand."""
     from .generate_data import generate_data, get_oauth_credentials, resolve_layout
 
-    creds = get_oauth_credentials(service_account_file=args.credentials)
+    creds = get_oauth_credentials(service_account_credentials=args.service_account_credentials)
     layout = resolve_layout(args.shared_drive_url, creds)
     generate_data(
         entities=args.entities,
@@ -25,7 +25,7 @@ def _run_generate_report(args: argparse.Namespace) -> int:
     """Entrypoint for the `generate-report` subcommand."""
     from .generate_report import generate_report, get_oauth_credentials, resolve_layout
 
-    creds = get_oauth_credentials(service_account_file=args.credentials)
+    creds = get_oauth_credentials(service_account_credentials=args.service_account_credentials)
     layout = resolve_layout(args.shared_drive_url, creds)
     generate_report(
         entities=args.entities,
@@ -52,8 +52,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Shared Drive root URL or ID that contains L0/L1 data and templates.",
     )
     gen_parser.add_argument(
-        "--credentials",
-        dest="credentials",
+        "--service-account-credentials",
         default=None,
         help="Path to the service account JSON key file. Defaults to service-account-credentials.json in the project root.",
     )
