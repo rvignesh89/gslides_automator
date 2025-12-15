@@ -16,7 +16,7 @@ dependencies = [
     "pandas>=1.5.0",
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
@@ -24,6 +24,9 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
+
+[project.urls]
+Homepage = "https://github.com/rvignesh89/gslides_automator"
 
 [project.scripts]
 gslides_automator = "gslides_automator.cli:main"
