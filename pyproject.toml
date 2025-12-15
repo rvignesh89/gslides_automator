@@ -26,11 +26,11 @@ classifiers = [
 ]
 
 [project.scripts]
-gslide_automator = "gslide_automator.cli:main"
+gslides_automator = "gslides_automator.cli:main"
 
 [project.optional-dependencies]
 dev = []
 
 [tool.setuptools]
-packages = ["gslide_automator"]
+packages = ["gslides_automator"]
 

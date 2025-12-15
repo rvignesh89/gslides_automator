@@ -1,15 +1,15 @@
 """
-Package exports for gslide_automator.
+Package exports for gslides_automator.
 """
 
 from __future__ import annotations
 
 from typing import Iterable, List, Optional
 
-from gslide_automator.auth import load_credentials
-from gslide_automator.generate_data import generate_data as _gd
-from gslide_automator.generate_report import generate_report as _gr
-from gslide_automator.drive_layout import DriveLayout, load_entities, resolve_layout
+from gslides_automator.auth import load_credentials
+from gslides_automator.generate_data import generate_data as _gd
+from gslides_automator.generate_report import generate_report as _gr
+from gslides_automator.drive_layout import DriveLayout, load_entities, resolve_layout
 
 
 def _ensure_list(value) -> Optional[List[str]]:

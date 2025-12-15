@@ -1,4 +1,4 @@
-"""Command-line interface for gslide_automator."""
+"""Command-line interface for gslides_automator."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def _run_generate_report(args: argparse.Namespace) -> int:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="gslide_automator",
+        prog="gslides_automator",
         description="Utilities for generating data and reports from Google Drive and Sheets.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)

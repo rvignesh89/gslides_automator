@@ -23,8 +23,8 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
 
-from gslide_automator.drive_layout import load_entities, resolve_layout, DriveLayout
-from gslide_automator.auth import get_oauth_credentials
+from gslides_automator.drive_layout import load_entities, resolve_layout, DriveLayout
+from gslides_automator.auth import get_oauth_credentials
 
 def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_delay=60, backoff_factor=2):
     """

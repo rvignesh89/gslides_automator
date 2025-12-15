@@ -22,8 +22,8 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
 try:
-    from gslide_automator.auth import get_oauth_credentials
-    from gslide_automator.drive_layout import load_entities, resolve_layout, DriveLayout
+    from gslides_automator.auth import get_oauth_credentials
+    from gslides_automator.drive_layout import load_entities, resolve_layout, DriveLayout
 except ImportError:  # Fallback for package-relative execution
     from .auth import get_oauth_credentials
     from .drive_layout import load_entities, resolve_layout, DriveLayout

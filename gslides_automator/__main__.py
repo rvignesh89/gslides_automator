@@ -1,4 +1,4 @@
-"""Module entrypoint for `python -m gslide_automator`."""
+"""Module entrypoint for `python -m gslides_automator`."""
 
 from .cli import main
 

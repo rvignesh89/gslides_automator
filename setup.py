@@ -26,7 +26,7 @@ setup(
     description="Generate data and reports from Google Sheets and Drive",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/rvignesh89/gslide_automator",
+    url="https://github.com/rvignesh89/gslides_automator",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",
