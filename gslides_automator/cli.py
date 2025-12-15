@@ -14,7 +14,6 @@ def _run_generate_data(args: argparse.Namespace) -> int:
     creds = get_oauth_credentials(service_account_credentials=args.service_account_credentials)
     layout = resolve_layout(args.shared_drive_url, creds)
     generate_data(
-        entities=args.entities,
         creds=creds,
         layout=layout,
     )
@@ -28,7 +27,6 @@ def _run_generate_report(args: argparse.Namespace) -> int:
     creds = get_oauth_credentials(service_account_credentials=args.service_account_credentials)
     layout = resolve_layout(args.shared_drive_url, creds)
     generate_report(
-        entities=args.entities,
         creds=creds,
         layout=layout,
     )
@@ -56,11 +54,6 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to the service account JSON key file. Defaults to service-account-credentials.json in the project root.",
     )
-    gen_parser.add_argument(
-        "--entities",
-        type=str,
-        help='Comma-separated list of entity names to process (e.g., "Hyundai,Volvo"). If not provided, all entities from the Google Sheet will be processed.',
-    )
     gen_parser.set_defaults(func=_run_generate_data)
 
     report_parser = subparsers.add_parser(
@@ -77,11 +70,6 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="credentials",
         default=None,
         help="Path to the service account JSON key file. Defaults to service-account-credentials.json in the project root.",
-    )
-    report_parser.add_argument(
-        "--entities",
-        type=str,
-        help='Comma-separated list of entity names to process (e.g., "Hyundai,Volvo"). If not provided, all entities from the entities file will be processed.',
     )
     report_parser.set_defaults(func=_run_generate_report)
 

@@ -2215,12 +2215,11 @@ def process_spreadsheet(spreadsheet_id, spreadsheet_name, template_id, output_fo
         traceback.print_exc()
         return None
 
-def generate_report(entities=None, creds=None, layout: DriveLayout = None, input_folder_id=None, template_id=None, output_folder_id=None):
+def generate_report(creds=None, layout: DriveLayout = None, input_folder_id=None, template_id=None, output_folder_id=None):
     """
-    Generate Google Slides presentations from Google Sheets for specified entities.
+    Generate Google Slides presentations from Google Sheets for entities marked for generation in entities.csv.
 
     Args:
-        entities: List of entity names to process, or None to process all entities from CSV
         creds: Google OAuth credentials. If None, will be obtained automatically.
         layout: DriveLayout object containing configuration. Required if not using individual folder IDs.
         input_folder_id: Input folder ID. If None, uses layout.l1_data_id.
@@ -2255,19 +2254,15 @@ def generate_report(entities=None, creds=None, layout: DriveLayout = None, input
     print(f"Output folder: {output_folder_id}\n")
 
     # Determine which entities to process
-    if entities is None:
-        if layout and layout.entities_csv_id:
-            target_entities = load_entities(layout.entities_csv_id, creds)
-            print(f"Loaded {len(target_entities)} entities from entities.csv\n")
-        else:
-            print("\n✗ No entities CSV ID found in layout and no entities provided.")
+    if layout and layout.entities_csv_id:
+        target_entities = load_entities(layout.entities_csv_id, creds)
+        print(f"Loaded {len(target_entities)} entities with generate=Y from entities.csv\n")
+        if not target_entities:
+            print("✗ No entities marked with generate=Y in entities.csv.")
             return {'successful': [], 'failed': []}
     else:
-        if isinstance(entities, str):
-            target_entities = [d.strip() for d in entities.split(',') if d.strip()]
-        else:
-            target_entities = entities
-        print(f"Processing specified entities: {', '.join(target_entities)}\n")
+        print("\n✗ No entities CSV ID found in layout.")
+        return {'successful': [], 'failed': []}
 
     # List all entity folders in the input folder
     print("Scanning input folder for entity folders...")
@@ -2284,7 +2279,7 @@ def generate_report(entities=None, creds=None, layout: DriveLayout = None, input
             entity_folders.append((folder_id, folder_name))
 
     if not entity_folders:
-        print(f"✗ No matching entity folders found for the specified entities.")
+        print(f"✗ No matching entity folders found for entities marked generate=Y.")
         print(f"  Available folders: {', '.join([name for _, name in all_entity_folders])}")
         print(f"  Requested entities: {', '.join(target_entities)}")
         return {'successful': [], 'failed': []}
@@ -2372,7 +2367,7 @@ def main():
     Main function to process all spreadsheets in the input folder and generate presentations (CLI entry point).
     """
     parser = argparse.ArgumentParser(
-        description='Generate Google Slides presentations from Google Sheets for specified entities'
+        description='Generate Google Slides presentations from Google Sheets for entities with generate=Y in entities.csv'
     )
     parser.add_argument(
         '--shared-drive-url',
@@ -2383,11 +2378,6 @@ def main():
         '--service-account-credentials',
         default=None,
         help='Path to the service account JSON key file.',
-    )
-    parser.add_argument(
-        '--entities',
-        type=str,
-        help='Comma-separated list of entity names to process (e.g., "Hyundai,Volvo"). If not provided, all entities from the entities file will be processed.'
     )
     args = parser.parse_args()
 
@@ -2403,7 +2393,6 @@ def main():
 
         # Call the main function
         generate_report(
-            entities=args.entities,
             creds=creds,
             layout=layout
         )

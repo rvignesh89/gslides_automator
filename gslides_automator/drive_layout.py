@@ -115,7 +115,8 @@ def resolve_layout(shared_drive_url: str, creds) -> DriveLayout:
 
 def load_entities(entities_csv_id: str, creds) -> List[str]:
     """
-    Download entities.csv and return non-empty entity names (first column).
+    Download entities.csv and return entity names (first column) where the adjacent
+    `generate` column (second column) is exactly `Y`.
     """
     drive_service = build("drive", "v3", credentials=creds)
     request = drive_service.files().get_media(fileId=entities_csv_id, supportsAllDrives=True)
@@ -132,11 +133,19 @@ def load_entities(entities_csv_id: str, creds) -> List[str]:
     for row in reader:
         if not row:
             continue
+
         name = row[0].strip()
+        generate_flag = row[1].strip() if len(row) > 1 else ""
+
         if not name:
             continue
+
+        # Skip header row
         if not entities and name.lower().startswith("entity"):
-            continue  # header
-        entities.append(name)
+            continue
+
+        # Only include rows explicitly marked for generation
+        if generate_flag == "Y":
+            entities.append(name)
     return entities
 

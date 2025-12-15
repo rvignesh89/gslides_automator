@@ -4,58 +4,40 @@ Package exports for gslides_automator.
 
 from __future__ import annotations
 
-from typing import Iterable, List, Optional
+from typing import List
 
 from gslides_automator.auth import load_credentials
 from gslides_automator.generate_data import generate_data as _gd
 from gslides_automator.generate_report import generate_report as _gr
-from gslides_automator.drive_layout import DriveLayout, load_entities, resolve_layout
-
-
-def _ensure_list(value) -> Optional[List[str]]:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        return [v.strip() for v in value.split(",") if v.strip()]
-    return list(value)
+from gslides_automator.drive_layout import DriveLayout, resolve_layout
 
 
 def generate_data(
     shared_drive_url: str,
     service_account_credentials: str,
-    entities: Iterable[str] | str | None = None,
 ) -> dict:
     """Populate L1-Data from L0-Data using the shared-drive layout."""
     creds = load_credentials(service_account_credentials)
     layout: DriveLayout = resolve_layout(shared_drive_url, creds)
 
-    target_entities = _ensure_list(entities)
-    if target_entities is None:
-        target_entities = load_entities(layout.entities_csv_id, creds)
-
     return _gd.generate_data(
-        entities=target_entities,
         creds=creds,
+        layout=layout,
     )
 
 
 def generate_report(
     shared_drive_url: str,
     service_account_credentials: str,
-    entities: Iterable[str] | str | None = None,
 ) -> dict:
-    """Build Google Slides reports from L1-Data for selected entities/slides."""
+    """Build Google Slides reports from L1-Data for entities marked with generate=Y."""
     creds = load_credentials(service_account_credentials)
     layout: DriveLayout = resolve_layout(shared_drive_url, creds)
 
-    target_entities = _ensure_list(entities)
-    if target_entities is None:
-        target_entities = load_entities(layout.entities_csv_id, creds)
-
     return _gr.generate_report(
-        entities=target_entities,
         creds=creds,
         input_folder_id=layout.l1_data_id,
         template_id=layout.report_template_id,
         output_folder_id=layout.l2_report_id,
+        layout=layout,
     )

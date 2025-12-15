@@ -75,7 +75,7 @@ The package works exclusively on Google Drive files only. One of the inputs to t
 └── entities.csv
 ```
 
-- **entitites.csv** - This file contains a csv file with single column and multiple rows. For each row the library will generate a report. The csv has a header row which contains the placeholder which will be replaced by the entity name in the report. For example if the header is `car_name` all occurences of `{{car_name}}` in text boxes in the report will be replaced by the car names.
+- **entities.csv** - Two columns: first column is the entity name; the second column `generate` controls processing. Rows with `generate` set to `Y` are processed, while `N` (or blank) rows are skipped. The first row is treated as a header.
 
 - **templates/** - This folder contains 2 files. A data template gsheet file and a slide template gslide file.
 

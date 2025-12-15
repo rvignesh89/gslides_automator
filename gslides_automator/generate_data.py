@@ -801,12 +801,11 @@ def process_entity(entity_name, creds, layout: DriveLayout):
         return False
 
 
-def generate_data(entities=None, creds=None, layout: DriveLayout = None):
+def generate_data(creds=None, layout: DriveLayout = None):
     """
-    Generate L1-Data from L0-Data for specified entities.
+    Generate L1-Data from L0-Data for entities marked for generation in entities.csv.
 
     Args:
-        entities: List of entity names to process, or None to process all entities from CSV
         creds: Google OAuth credentials. If None, will be obtained automatically.
         layout: DriveLayout object containing configuration. Required.
 
@@ -824,21 +823,16 @@ def generate_data(entities=None, creds=None, layout: DriveLayout = None):
     if creds is None:
         creds = get_oauth_credentials()
 
-    # Parse entity names
-    if entities is None:
-        if layout.entities_csv_id:
-            entities = load_entities(layout.entities_csv_id, creds)
-            print(f"✓ Loaded {len(entities)} entities from entities.csv")
-        else:
-            print("\n✗ No entities CSV ID found in layout and no entities provided.")
+    # Load entity names from entities.csv with generate flag
+    if layout.entities_csv_id:
+        entities = load_entities(layout.entities_csv_id, creds)
+        print(f"✓ Loaded {len(entities)} entities with generate=Y from entities.csv")
+        if not entities:
+            print("\n✗ No entities marked with generate=Y in entities.csv.")
             return {'successful': [], 'failed': []}
     else:
-        if isinstance(entities, str):
-            entities = [d.strip() for d in entities.split(',') if d.strip()]
-        if not entities:
-            print("\n✗ No valid entity names provided.")
-            return {'successful': [], 'failed': []}
-        print(f"✓ Using provided entity names: {', '.join(entities)}")
+        print("\n✗ No entities CSV ID found in layout.")
+        return {'successful': [], 'failed': []}
 
     print(f"\n✓ Processing {len(entities)} entities")
     print(f"  Entities: {', '.join(entities)}\n")
@@ -889,7 +883,7 @@ def main():
     Main function to process entities (CLI entry point).
     """
     parser = argparse.ArgumentParser(
-        description='Generate L1-Data from L0-Data for specified entities'
+        description='Generate L1-Data from L0-Data for entities with generate=Y in entities.csv'
     )
     parser.add_argument(
         '--shared-drive-url',
@@ -900,11 +894,6 @@ def main():
         '--service-account-credentials',
         default=None,
         help='Path to the service account JSON key file.',
-    )
-    parser.add_argument(
-        '--entities',
-        type=str,
-        help='Comma-separated list of entity names to process (e.g., "Hyundai,Volvo"). If not provided, all entities from the Google Sheet will be processed.'
     )
     args = parser.parse_args()
 
@@ -920,7 +909,6 @@ def main():
 
         # Call the main function
         generate_data(
-            entities=args.entities,
             creds=creds,
             layout=layout
         )
