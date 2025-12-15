@@ -20,7 +20,7 @@ def generate_data(
     creds = load_credentials(service_account_credentials)
     layout: DriveLayout = resolve_layout(shared_drive_url, creds)
 
-    return _gd.generate_data(
+    return _gd(
         creds=creds,
         layout=layout,
     )
@@ -34,7 +34,7 @@ def generate_report(
     creds = load_credentials(service_account_credentials)
     layout: DriveLayout = resolve_layout(shared_drive_url, creds)
 
-    return _gr.generate_report(
+    return _gr(
         creds=creds,
         input_folder_id=layout.l1_data_id,
         template_id=layout.report_template_id,
