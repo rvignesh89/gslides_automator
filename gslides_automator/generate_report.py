@@ -14,6 +14,7 @@ import re
 import time
 import json
 import argparse
+from typing import Optional, Set
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google.auth.transport.requests import Request
@@ -23,10 +24,14 @@ PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
 try:
     from gslides_automator.auth import get_oauth_credentials
-    from gslides_automator.drive_layout import load_entities, resolve_layout, DriveLayout
+    from gslides_automator.drive_layout import (
+        DriveLayout,
+        load_entities_with_slides,
+        resolve_layout,
+    )
 except ImportError:  # Fallback for package-relative execution
     from .auth import get_oauth_credentials
-    from .drive_layout import load_entities, resolve_layout, DriveLayout
+    from .drive_layout import DriveLayout, load_entities_with_slides, resolve_layout
 
 def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_delay=60, backoff_factor=2):
     """
@@ -503,20 +508,21 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
             print(f"  ⚠️  Template or target has fewer slides than requested.")
             return False
 
-        # Tables cannot be safely recreated slide-by-slide because formatting would be lost
-        table_slides = []
-        for slide_number in slide_numbers:
-            slide_index = slide_number - 1
-            target_slide = target_slides[slide_index]
-            if any('table' in element for element in target_slide.get('pageElements', [])):
-                table_slides.append(slide_number)
+        # # Tables cannot be safely recreated slide-by-slide because formatting would be lost
+        # Leaving the code to fail if tables are present until more feedback is available.
+        # table_slides = []
+        # for slide_number in slide_numbers:
+        #     slide_index = slide_number - 1
+        #     target_slide = target_slides[slide_index]
+        #     if any('table' in element for element in target_slide.get('pageElements', [])):
+        #         table_slides.append(slide_number)
 
-        if table_slides:
-            slide_list = ', '.join(str(s) for s in sorted(table_slides))
-            raise ValueError(
-                f"Slide(s) {slide_list} contain table elements. Per-slide regeneration is not supported because tables cannot be recreated with proper formatting via the API. "
-                f"Please regenerate the entire report without --slides."
-            )
+        # if table_slides:
+        #     slide_list = ', '.join(str(s) for s in sorted(table_slides))
+        #     raise ValueError(
+        #         f"Slide(s) {slide_list} contain table elements. Per-slide regeneration is not supported because tables cannot be recreated with proper formatting via the API. "
+        #         f"Please regenerate the entire report without --slides."
+        #     )
 
         # Delete target slides first (in reverse order to maintain indices)
         delete_requests = []
@@ -1917,7 +1923,7 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
         print(f"    ⚠️  Error populating table on slide {slide_number}: {error}")
         return False
 
-def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_name, data_sheet, entity_folder_id, creds):
+def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_name, data_sheet, entity_folder_id, creds, slides: Optional[Set[int]] = None):
     """
     Process all slides in the presentation, replacing placeholders based on sheet mappings.
 
@@ -1929,6 +1935,7 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
         data_sheet: Dictionary with text replacement values from the 'data' tab
         entity_folder_id: ID of the entity folder containing image files
         creds: Service account credentials
+        slides: Optional set of slide numbers to process. If None, processes all slides.
 
     Returns:
         bool: True if successful, False otherwise
@@ -1960,6 +1967,10 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
         # Loop through all slides
         for slide_index, slide in enumerate(presentation_slides):
             slide_number = slide_index + 1  # 1-based slide number (used only for messaging)
+
+            if slides and slide_number not in slides:
+                print(f"\nSkipping slide {slide_number} (not requested)")
+                continue
 
             slide_id = slide.get('objectId')
 
@@ -2115,7 +2126,7 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
         print(f"Error processing slides: {error}")
         return False
 
-def process_spreadsheet(spreadsheet_id, spreadsheet_name, template_id, output_folder_id, entity_folder_id, creds):
+def process_spreadsheet(spreadsheet_id, spreadsheet_name, template_id, output_folder_id, entity_folder_id, creds, slides: Optional[Set[int]] = None):
     """
     Process a spreadsheet to generate a Google Slides presentation.
 
@@ -2171,21 +2182,48 @@ def process_spreadsheet(spreadsheet_id, spreadsheet_name, template_id, output_fo
         try:
             data_sheet = read_data_from_sheet(spreadsheet_id, "data", creds)
             if data_sheet:
-                print(f"  Loaded {len(data_sheet)} column(s): {', '.join(data_sheet.keys())}")
+                print(f"  Loaded {len(data_sheet)} placeholder(s): {', '.join(data_sheet.keys())}")
             else:
                 print("  ⚠️  No data found in 'data' sheet")
         except Exception as e:
             print(f"  ⚠️  Failed to read 'data' sheet: {e}")
             data_sheet = None
 
-        # Delete existing presentation if it exists then recreate
-        print("Checking for existing presentation...")
-        delete_existing_presentation(entity_name, output_folder_id, creds)
+        incremental_update = slides is not None
 
-        # Copy template presentation (use entity_name from file/folder name)
-        presentation_id = copy_template_presentation(
-            entity_name, template_id, output_folder_id, creds
-        )
+        if incremental_update:
+            print("Checking for existing presentation (incremental slide regeneration)...")
+            presentation_id = find_existing_presentation(entity_name, output_folder_id, creds)
+            if presentation_id:
+                print(f"  ✓ Using existing presentation: {entity_name}.gslides (ID: {presentation_id})")
+                try:
+                    refreshed = replace_slides_from_template(
+                        presentation_id=presentation_id,
+                        template_id=template_id,
+                        slide_numbers=slides,
+                        creds=creds,
+                    )
+                except ValueError as e:
+                    print(f"  ✗ {e}")
+                    return None
+
+                if not refreshed:
+                    print("  ✗ Failed to refresh requested slides from template.")
+                    return None
+            else:
+                print("  ⚠️ No existing presentation found; creating new from template.")
+                presentation_id = copy_template_presentation(
+                    entity_name, template_id, output_folder_id, creds
+                )
+        else:
+            # Delete existing presentation if it exists then recreate
+            print("Checking for existing presentation...")
+            delete_existing_presentation(entity_name, output_folder_id, creds)
+
+            # Copy template presentation (use entity_name from file/folder name)
+            presentation_id = copy_template_presentation(
+                entity_name, template_id, output_folder_id, creds
+            )
 
         # Process all slides and replace placeholders
         success = process_all_slides(
@@ -2196,6 +2234,7 @@ def process_spreadsheet(spreadsheet_id, spreadsheet_name, template_id, output_fo
             data_sheet=data_sheet,
             entity_folder_id=entity_folder_id,
             creds=creds,
+            slides=slides,
         )
 
         if not success:
@@ -2255,7 +2294,7 @@ def generate_report(creds=None, layout: DriveLayout = None, input_folder_id=None
 
     # Determine which entities to process
     if layout and layout.entities_csv_id:
-        target_entities = load_entities(layout.entities_csv_id, creds)
+        target_entities = load_entities_with_slides(layout.entities_csv_id, creds)
         print(f"Loaded {len(target_entities)} entities with generate=Y from entities.csv\n")
         if not target_entities:
             print("✗ No entities marked with generate=Y in entities.csv.")
@@ -2310,6 +2349,10 @@ def generate_report(creds=None, layout: DriveLayout = None, input_folder_id=None
             # Process the first spreadsheet in the entity folder
             spreadsheet_id, spreadsheet_name = spreadsheets[0]
 
+            slides_to_process = target_entities.get(entity_name)
+            slide_list_msg = "all slides" if not slides_to_process else ", ".join(str(n) for n in sorted(slides_to_process))
+            print(f"  Slides to generate: {slide_list_msg}")
+
             # Process the spreadsheet
             presentation_id = process_spreadsheet(
                 spreadsheet_id=spreadsheet_id,
@@ -2317,7 +2360,8 @@ def generate_report(creds=None, layout: DriveLayout = None, input_folder_id=None
                 template_id=template_id,
                 output_folder_id=output_folder_id,
                 entity_folder_id=entity_folder_id,
-                creds=creds
+                creds=creds,
+                slides=slides_to_process,
             )
 
             if presentation_id:

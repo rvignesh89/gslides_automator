@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import csv
 import io
 import re
-from typing import Iterable, List, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Set
 
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -147,5 +147,87 @@ def load_entities(entities_csv_id: str, creds) -> List[str]:
         # Only include rows explicitly marked for generation
         if generate_flag == "Y":
             entities.append(name)
+    return entities
+
+def _parse_slides_value(slides_value: str) -> Optional[Set[int]]:
+    """
+    Parse a slides column value into a set of slide numbers.
+
+    Accepts comma-separated numbers and ranges (e.g., "1,2-4,6").
+    Returns None when the value is blank or no valid numbers are found
+    to indicate that all slides should be processed.
+    """
+    if not slides_value:
+        return None
+
+    slides: Set[int] = set()
+    for part in slides_value.split(","):
+        part = part.strip()
+        if not part:
+            continue
+
+        if "-" in part:
+            bounds = part.split("-", 1)
+            if len(bounds) != 2:
+                continue
+            try:
+                start = int(bounds[0].strip())
+                end = int(bounds[1].strip())
+            except ValueError:
+                continue
+
+            if start > end:
+                start, end = end, start
+
+            for num in range(start, end + 1):
+                if num > 0:
+                    slides.add(num)
+        else:
+            try:
+                value = int(part)
+            except ValueError:
+                continue
+            if value > 0:
+                slides.add(value)
+
+    return slides or None
+
+
+def load_entities_with_slides(entities_csv_id: str, creds) -> Dict[str, Optional[Set[int]]]:
+    """
+    Download entities.csv and return a mapping of entity name to requested slide
+    numbers for rows marked with generate=Y. A value of None means all slides.
+    """
+    drive_service = build("drive", "v3", credentials=creds)
+    request = drive_service.files().get_media(fileId=entities_csv_id, supportsAllDrives=True)
+    buffer = io.BytesIO()
+    downloader = MediaIoBaseDownload(buffer, request)
+    done = False
+    while not done:
+        status, done = downloader.next_chunk()
+    buffer.seek(0)
+    content = buffer.read().decode("utf-8")
+
+    reader = csv.reader(io.StringIO(content))
+    entities: Dict[str, Optional[Set[int]]] = {}
+    for row in reader:
+        if not row:
+            continue
+
+        name = row[0].strip()
+        generate_flag = row[1].strip() if len(row) > 1 else ""
+        slides_value = row[2].strip() if len(row) > 2 else ""
+
+        if not name:
+            continue
+
+        # Skip header row
+        if not entities and name.lower().startswith("entity"):
+            continue
+
+        if generate_flag == "Y":
+            slides = _parse_slides_value(slides_value)
+            entities[name] = slides
+
     return entities
 
