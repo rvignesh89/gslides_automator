@@ -19,6 +19,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google.auth.transport.requests import Request
 
+_TABLE_SLIDE_PROCEED_DECISION: Optional[bool] = None  # Session-level choice for table slide regeneration
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
@@ -508,21 +510,34 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
             print(f"  ⚠️  Template or target has fewer slides than requested.")
             return False
 
-        # # Tables cannot be safely recreated slide-by-slide because formatting would be lost
-        # Leaving the code to fail if tables are present until more feedback is available.
-        # table_slides = []
-        # for slide_number in slide_numbers:
-        #     slide_index = slide_number - 1
-        #     target_slide = target_slides[slide_index]
-        #     if any('table' in element for element in target_slide.get('pageElements', [])):
-        #         table_slides.append(slide_number)
+        # Tables cannot be safely recreated slide-by-slide because formatting would be lost.
+        # Check if any slides to be regenerated contain tables.
+        table_slides = []
+        for slide_number in slide_numbers:
+            slide_index = slide_number - 1
+            target_slide = target_slides[slide_index]
+            if any('table' in element for element in target_slide.get('pageElements', [])):
+                table_slides.append(slide_number)
 
-        # if table_slides:
-        #     slide_list = ', '.join(str(s) for s in sorted(table_slides))
-        #     raise ValueError(
-        #         f"Slide(s) {slide_list} contain table elements. Per-slide regeneration is not supported because tables cannot be recreated with proper formatting via the API. "
-        #         f"Please regenerate the entire report without --slides."
-        #     )
+        # If any such slides, warn user and prompt for confirmation on first occurrence.
+        # On subsequent calls in the same session, reuse the stored decision (still warn but do not re-prompt).
+        if table_slides:
+            global _TABLE_SLIDE_PROCEED_DECISION
+            slide_list = ', '.join(str(s) for s in sorted(table_slides))
+            print(f"⚠️  Slide(s) {slide_list} contain table elements.")
+            print("    Per-slide regeneration is not supported for slides with tables, as tables cannot be recreated with proper formatting via the API.")
+            print("    You may lose table formatting or experience unexpected behavior if you choose to proceed.")
+            if _TABLE_SLIDE_PROCEED_DECISION is None:
+                proceed = None
+                while proceed not in ("y", "yes", "n", "no"):
+                    proceed = input("Do you wish to continue anyway? (y/N): ").strip().lower() or "n"
+                _TABLE_SLIDE_PROCEED_DECISION = proceed in ("y", "yes")
+                print("    Your choice will be remembered for all future entities in this session.")
+            elif not _TABLE_SLIDE_PROCEED_DECISION:
+                print("✗ Cancelling processing as per stored user preference.")
+                return False
+            else:
+                print("    Proceeding automatically based on stored preference to continue despite tables.")
 
         # Delete target slides first (in reverse order to maintain indices)
         delete_requests = []
@@ -828,6 +843,289 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                                         }
                                     }
                                 })
+
+                    elif 'table' in element:
+                        table = element.get('table', {})
+                        transform = element.get('transform', {})
+                        size = element.get('size', {})
+
+                        table_rows = table.get('tableRows', [])
+                        table_columns = table.get('tableColumns', [])
+
+                        row_count = len(table_rows)
+                        column_count = len(table_columns)
+
+                        if row_count == 0 or column_count == 0:
+                            print(f"    ⚠️  Warning: Table element missing rows or columns, skipping")
+                            continue
+
+                        new_table_id = str(uuid.uuid4()).replace('-', '')[:26]
+
+                        # Create table with the same dimensions and positioning
+                        copy_requests.append({
+                            'createTable': {
+                                'objectId': new_table_id,
+                                'elementProperties': {
+                                    'pageObjectId': new_slide_id,
+                                    'size': size,
+                                    'transform': transform
+                                },
+                                'rows': row_count,
+                                'columns': column_count
+                            }
+                        })
+
+                        # Copy column widths if present
+                        for col_idx, column in enumerate(table_columns):
+                            col_props = column.get('tableColumnProperties', {})
+                            if col_props:
+                                filtered_col_props = {}
+                                if 'columnWidth' in col_props:
+                                    filtered_col_props['columnWidth'] = col_props['columnWidth']
+
+                                if filtered_col_props:
+                                    copy_requests.append({
+                                        'updateTableColumnProperties': {
+                                            'objectId': new_table_id,
+                                            'columnIndices': [col_idx],
+                                            'tableColumnProperties': filtered_col_props,
+                                            'fields': ','.join(filtered_col_props.keys())
+                                        }
+                                    })
+
+                        # Helper to filter writable cell properties
+                        def filter_table_cell_properties(cell_props):
+                            if not cell_props:
+                                return {}
+
+                            writable_fields = [
+                                'tableCellBackgroundFill',
+                                'contentAlignment',
+                                'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+                                'tableCellBorderBottom', 'tableCellBorderTop',
+                                'tableCellBorderLeft', 'tableCellBorderRight'
+                            ]
+
+                            filtered = {}
+                            for field in writable_fields:
+                                if field in cell_props:
+                                    filtered[field] = cell_props[field]
+                            return filtered
+
+                        # Reuse text/paragraph style filters for table text
+                        writable_text_style_fields = [
+                            'bold', 'italic', 'underline', 'strikethrough',
+                            'fontFamily', 'fontSize', 'foregroundColor', 'backgroundColor',
+                            'weightedFontFamily'
+                        ]
+
+                        def filter_text_style(text_style):
+                            if not text_style:
+                                return {}
+                            filtered = {}
+                            for field in writable_text_style_fields:
+                                if field in text_style:
+                                    filtered[field] = text_style[field]
+                            return filtered
+
+                        writable_paragraph_fields = [
+                            'alignment', 'direction', 'spacingMode', 'spaceAbove', 'spaceBelow',
+                            'lineSpacing', 'indentFirstLine', 'indentStart', 'indentEnd'
+                        ]
+
+                        def filter_paragraph_style(para_style):
+                            if not para_style:
+                                return {}
+                            filtered = {}
+                            for field in writable_paragraph_fields:
+                                if field in para_style:
+                                    filtered[field] = para_style[field]
+                            return filtered
+
+                        # Copy row heights and cell content/properties
+                        for row_idx, row in enumerate(table_rows):
+                            # Row height if available (minRowHeight is the writable field)
+                            row_props = row.get('tableRowProperties', {})
+                            row_height = row_props.get('minRowHeight', row.get('rowHeight'))
+                            if row_height:
+                                copy_requests.append({
+                                    'updateTableRowProperties': {
+                                        'objectId': new_table_id,
+                                        'rowIndices': [row_idx],
+                                        'tableRowProperties': {
+                                            'minRowHeight': row_height
+                                        },
+                                        'fields': 'minRowHeight'
+                                    }
+                                })
+
+                            table_cells = row.get('tableCells', [])
+                            for col_idx, cell in enumerate(table_cells):
+                                cell_location = {
+                                    'rowIndex': row_idx,
+                                    'columnIndex': col_idx
+                                }
+
+                                # Copy cell properties
+                                cell_props = cell.get('tableCellProperties', {})
+                                filtered_cell_props = filter_table_cell_properties(cell_props)
+                                if filtered_cell_props:
+                                    copy_requests.append({
+                                        'updateTableCellProperties': {
+                                            'objectId': new_table_id,
+                                            'tableRange': {
+                                                'location': cell_location,
+                                                'rowSpan': 1,
+                                                'columnSpan': 1
+                                            },
+                                            'tableCellProperties': filtered_cell_props,
+                                            'fields': ','.join(filtered_cell_props.keys())
+                                        }
+                                    })
+
+                                # Copy text content and formatting inside the cell
+                                cell_text = cell.get('text', {})
+                                text_elements = cell_text.get('textElements', [])
+                                default_paragraph_style = cell_text.get('paragraphStyle')
+
+                                collected_text_runs = []
+                                collected_paragraph_markers = []
+
+                                for te in text_elements:
+                                    if 'textRun' in te:
+                                        text_run = te['textRun']
+                                        content = text_run.get('content', '')
+                                        style = text_run.get('style', {})
+                                        start_index = te.get('startIndex', 0)
+                                        end_index = te.get('endIndex', start_index + len(content) if content else start_index)
+
+                                        if content:
+                                            collected_text_runs.append({
+                                                'startIndex': start_index,
+                                                'endIndex': end_index,
+                                                'content': content,
+                                                'style': style
+                                            })
+
+                                    elif 'paragraphMarker' in te:
+                                        para_marker = te['paragraphMarker']
+                                        para_style = para_marker.get('style', {}) if 'style' in para_marker else None
+                                        paragraph_style = para_style if para_style else default_paragraph_style
+
+                                        if paragraph_style:
+                                            end_index = te.get('endIndex', 0)
+                                            collected_paragraph_markers.append({
+                                                'endIndex': end_index,
+                                                'style': paragraph_style
+                                            })
+
+                                collected_paragraph_markers.sort(key=lambda x: x['endIndex'])
+                                collected_paragraph_styles = []
+
+                                for i, para_marker in enumerate(collected_paragraph_markers):
+                                    start_index = 0
+                                    if i > 0:
+                                        start_index = collected_paragraph_styles[i - 1]['endIndex']
+
+                                    collected_paragraph_styles.append({
+                                        'startIndex': start_index,
+                                        'endIndex': para_marker['endIndex'],
+                                        'style': para_marker['style']
+                                    })
+
+                                max_text_index = 0
+                                if collected_text_runs:
+                                    max_text_index = max(tr['endIndex'] for tr in collected_text_runs)
+
+                                last_para_end = collected_paragraph_styles[-1]['endIndex'] if collected_paragraph_styles else 0
+                                if max_text_index > last_para_end and default_paragraph_style:
+                                    collected_paragraph_styles.append({
+                                        'startIndex': last_para_end,
+                                        'endIndex': max_text_index,
+                                        'style': default_paragraph_style
+                                    })
+
+                                collected_text_runs.sort(key=lambda x: x['startIndex'])
+                                full_text_content = ''.join(tr['content'] for tr in collected_text_runs)
+
+                                if full_text_content:
+                                    copy_requests.append({
+                                        'insertText': {
+                                            'objectId': new_table_id,
+                                            'cellLocation': cell_location,
+                                            'insertionIndex': 0,
+                                            'text': full_text_content
+                                        }
+                                    })
+
+                                for text_run in collected_text_runs:
+                                    style = text_run.get('style', {})
+                                    style_update = filter_text_style(style)
+                                    if style_update:
+                                        copy_requests.append({
+                                            'updateTextStyle': {
+                                                'objectId': new_table_id,
+                                                'cellLocation': cell_location,
+                                                'textRange': {
+                                                    'type': 'FIXED_RANGE',
+                                                    'startIndex': text_run['startIndex'],
+                                                    'endIndex': text_run['endIndex']
+                                                },
+                                                'style': style_update,
+                                                'fields': ','.join(style_update.keys())
+                                            }
+                                        })
+
+                                for para_info in collected_paragraph_styles:
+                                    para_style = para_info['style']
+                                    para_start = para_info['startIndex']
+                                    para_end = para_info['endIndex']
+
+                                    if para_end > para_start:
+                                        para_style_update = filter_paragraph_style(para_style)
+                                        if para_style_update:
+                                            copy_requests.append({
+                                                'updateParagraphStyle': {
+                                                    'objectId': new_table_id,
+                                                    'cellLocation': cell_location,
+                                                    'textRange': {
+                                                        'type': 'FIXED_RANGE',
+                                                        'startIndex': para_start,
+                                                        'endIndex': para_end
+                                                    },
+                                                    'style': para_style_update,
+                                                    'fields': ','.join(para_style_update.keys())
+                                                }
+                                            })
+
+                                if not collected_paragraph_styles and default_paragraph_style and full_text_content:
+                                    para_style_update = filter_paragraph_style(default_paragraph_style)
+                                    if para_style_update:
+                                        copy_requests.append({
+                                            'updateParagraphStyle': {
+                                                'objectId': new_table_id,
+                                                'cellLocation': cell_location,
+                                                'textRange': {
+                                                    'type': 'ALL'
+                                                },
+                                                'style': para_style_update,
+                                                'fields': ','.join(para_style_update.keys())
+                                            }
+                                        })
+
+                                if full_text_content and full_text_content.endswith('\n'):
+                                    text_length = len(full_text_content)
+                                    copy_requests.append({
+                                        'deleteText': {
+                                            'objectId': new_table_id,
+                                            'cellLocation': cell_location,
+                                            'textRange': {
+                                                'type': 'FIXED_RANGE',
+                                                'startIndex': text_length - 1,
+                                                'endIndex': text_length
+                                            }
+                                        }
+                                    })
 
                     elif 'image' in element:
                         # Handle image elements - copy them from template
