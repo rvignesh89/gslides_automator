@@ -7,26 +7,26 @@ import sys
 from typing import Callable
 
 
-def _run_generate_data(args: argparse.Namespace) -> int:
-    """Entrypoint for the `generate-data` subcommand."""
-    from .generate_data import generate_data, get_oauth_credentials, resolve_layout
+def _run_l1_generate(args: argparse.Namespace) -> int:
+    """Entrypoint for the `l1-generate` subcommand."""
+    from .l1_generate import l1_generate, get_oauth_credentials, resolve_layout
 
     creds = get_oauth_credentials(service_account_credentials=args.service_account_credentials)
     layout = resolve_layout(args.shared_drive_url, creds)
-    generate_data(
+    l1_generate(
         creds=creds,
         layout=layout,
     )
     return 0
 
 
-def _run_generate_report(args: argparse.Namespace) -> int:
-    """Entrypoint for the `generate-report` subcommand."""
-    from .generate_report import generate_report, get_oauth_credentials, resolve_layout
+def _run_l2_generate(args: argparse.Namespace) -> int:
+    """Entrypoint for the `l2-generate` subcommand."""
+    from .l2_generate import l2_generate, get_oauth_credentials, resolve_layout
 
     creds = get_oauth_credentials(service_account_credentials=args.service_account_credentials)
     layout = resolve_layout(args.shared_drive_url, creds)
-    generate_report(
+    l2_generate(
         creds=creds,
         layout=layout,
     )
@@ -41,7 +41,7 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     gen_parser = subparsers.add_parser(
-        "generate-data",
+        "l1-generate",
         help="Generate L1 data from the shared drive layout.",
     )
     gen_parser.add_argument(
@@ -54,10 +54,10 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to the service account JSON key file. Defaults to service-account-credentials.json in the project root.",
     )
-    gen_parser.set_defaults(func=_run_generate_data)
+    gen_parser.set_defaults(func=_run_l1_generate)
 
     report_parser = subparsers.add_parser(
-        "generate-report",
+        "l2-generate",
         help="Generate Google Slides reports from L1 data.",
     )
     report_parser.add_argument(
@@ -71,7 +71,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to the service account JSON key file. Defaults to service-account-credentials.json in the project root.",
     )
-    report_parser.set_defaults(func=_run_generate_report)
+    report_parser.set_defaults(func=_run_l2_generate)
 
     return parser
 

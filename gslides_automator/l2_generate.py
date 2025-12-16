@@ -2552,7 +2552,7 @@ def process_spreadsheet(spreadsheet_id, spreadsheet_name, template_id, output_fo
         traceback.print_exc()
         return None
 
-def generate_report(creds=None, layout: DriveLayout = None, input_folder_id=None, template_id=None, output_folder_id=None):
+def l2_generate(creds=None, layout: DriveLayout = None, input_folder_id=None, template_id=None, output_folder_id=None):
     """
     Generate Google Slides presentations from Google Sheets for entities marked for generation in entities.csv.
 
@@ -2734,7 +2734,7 @@ def main():
         layout = resolve_layout(args.shared_drive_url, creds)
 
         # Call the main function
-        generate_report(
+        l2_generate(
             creds=creds,
             layout=layout
         )

@@ -801,7 +801,7 @@ def process_entity(entity_name, creds, layout: DriveLayout):
         return False
 
 
-def generate_data(creds=None, layout: DriveLayout = None):
+def l1_generate(creds=None, layout: DriveLayout = None):
     """
     Generate L1-Data from L0-Data for entities marked for generation in entities.csv.
 
@@ -908,7 +908,7 @@ def main():
         layout = resolve_layout(args.shared_drive_url, creds)
 
         # Call the main function
-        generate_data(
+        l1_generate(
             creds=creds,
             layout=layout
         )
