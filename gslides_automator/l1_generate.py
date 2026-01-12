@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 """
-Script to generate L1-Data from L0-Data for entities in Tamil Nadu.
-Reads CSV files and images from L0-Data folder, clones entity data templates,
-populates Google Sheets tabs with CSV data, and copies images to L1-Data folder.
+Script to generate L1-Merged from L0-Raw for entities in Tamil Nadu.
+Reads CSV files and images from L0-Raw folder, clones entity data templates,
+populates Google Sheets tabs with CSV data, and copies images to L1-Merged folder.
 """
 
 from googleapiclient.discovery import build
@@ -91,39 +91,6 @@ def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_del
                 # For non-retryable errors, re-raise immediately
                 raise
 
-
-def read_entities_from_csv(csv_path):
-    """
-    Read entity names from a CSV file.
-    The CSV should have entity names in the first column.
-
-    Args:
-        csv_path: Path to the CSV file
-
-    Returns:
-        list: List of entity names (strings), or empty list if error
-    """
-    try:
-        entities = []
-        with open(csv_path, 'r', encoding='utf-8') as f:
-            reader = csv.reader(f)
-            for row in reader:
-                if row:  # Check if row is not empty
-                    entity_name = row[0].strip()
-                    if entity_name:  # Only add non-empty names
-                        entities.append(entity_name)
-
-        # Remove header if it exists
-        if entities and entities[0].lower() in ['entity', 'entities', 'name', 'names']:
-            entities = entities[1:]
-
-        return entities
-    except Exception as e:
-        print(f"Error reading entities from CSV file: {e}")
-        import traceback
-        traceback.print_exc()
-        return []
-
 def find_existing_file(drive_service, file_name, folder_id):
     """
     Check if a file with the given name exists in the specified folder.
@@ -154,7 +121,6 @@ def find_existing_file(drive_service, file_name, folder_id):
     except HttpError as error:
         print(f"Error searching for existing file '{file_name}': {error}")
         return None
-
 
 def delete_file(drive_service, file_id):
     """
@@ -226,7 +192,6 @@ def delete_file(drive_service, file_id):
             print(f"  ⚠️  Error deleting file '{file_name}': {error}")
         return False
 
-
 def find_or_create_entity_folder(drive_service, entity_name, parent_folder_id):
     """
     Find entity subfolder in parent folder, create if doesn't exist.
@@ -277,7 +242,6 @@ def find_or_create_entity_folder(drive_service, entity_name, parent_folder_id):
     except HttpError as error:
         print(f"Error finding/creating entity folder '{entity_name}': {error}")
         return None
-
 
 def clone_template_to_entity(drive_service, template_id, entity_name, folder_id):
     """
@@ -353,7 +317,6 @@ def clone_template_to_entity(drive_service, template_id, entity_name, folder_id)
             print(f"Error copying template: {error}")
         return None
 
-
 def list_csv_files_in_folder(drive_service, folder_id):
     """
     List all CSV files in a Google Drive folder.
@@ -382,7 +345,6 @@ def list_csv_files_in_folder(drive_service, folder_id):
     except HttpError as error:
         print(f"Error listing CSV files in folder: {error}")
         return []
-
 
 def download_csv_from_drive(drive_service, file_id):
     """
@@ -425,7 +387,6 @@ def download_csv_from_drive(drive_service, file_id):
         print(f"Error downloading CSV file: {error}")
         return None
 
-
 def parse_csv_filename(filename):
     """
     Parse CSV filename to extract tab name.
@@ -442,7 +403,6 @@ def parse_csv_filename(filename):
         return filename[:-4]
     return filename
 
-
 def find_existing_spreadsheet(drive_service, entity_name, folder_id):
     """
     Find existing spreadsheet in L1 folder (don't create new one).
@@ -457,27 +417,6 @@ def find_existing_spreadsheet(drive_service, entity_name, folder_id):
     """
     file_name = f"{entity_name}"
     return find_existing_file(drive_service, file_name, folder_id)
-
-
-
-
-def _column_number_to_letter(n):
-    """
-    Convert a column number (1-based) to Excel column letter (A, B, ..., Z, AA, AB, ...).
-
-    Args:
-        n: Column number (1-based)
-
-    Returns:
-        str: Column letter(s)
-    """
-    result = ""
-    while n > 0:
-        n -= 1
-        result = chr(65 + (n % 26)) + result
-        n //= 26
-    return result
-
 
 def _convert_value_to_proper_type(value):
     """
@@ -511,7 +450,6 @@ def _convert_value_to_proper_type(value):
 
     # Return as string
     return value_str
-
 
 def write_csv_to_sheet_tab(gspread_client, spreadsheet_id, tab_name, csv_data, creds):
     """
@@ -575,7 +513,6 @@ def write_csv_to_sheet_tab(gspread_client, spreadsheet_id, tab_name, csv_data, c
         print(f"    ✗ Error writing data to tab '{tab_name}': {e}")
         return False
 
-
 def list_image_files_in_folder(drive_service, folder_id):
     """
     List all image files in a Google Drive folder.
@@ -616,7 +553,6 @@ def list_image_files_in_folder(drive_service, folder_id):
     except HttpError as error:
         print(f"Error listing image files in folder: {error}")
         return []
-
 
 def copy_image_to_folder(drive_service, source_file_id, destination_folder_id, file_name):
     """
@@ -685,7 +621,6 @@ def copy_image_to_folder(drive_service, source_file_id, destination_folder_id, f
         print(f"    ✗ Error copying image '{file_name}': {error}")
         return None
 
-
 def process_entity(entity_name, creds, layout: DriveLayout):
     """
     Main processing function for a single entity.
@@ -698,33 +633,29 @@ def process_entity(entity_name, creds, layout: DriveLayout):
     Returns:
         bool: True if successful, False otherwise
     """
-    print(f"\n{'='*80}")
-    print(f"Processing entity: {entity_name}")
-    print(f"{'='*80}\n")
-
     drive_service = build('drive', 'v3', credentials=creds)
     gspread_client = gspread.authorize(creds)
 
-    l1_root_id = layout.l1_data_id
-    l0_root_id = layout.l0_data_id
+    l1_root_id = layout.l1_merged_id
+    l0_root_id = layout.l0_raw_id
     template_id = layout.data_template_id
 
     try:
-        # 1. Find/create L1-Data entity folder
-        print(f"Finding/creating L1-Data folder for {entity_name}...")
+        # 1. Find/create L1-Merged entity folder
+        print(f"Finding/creating L1-Merged folder for {entity_name}...")
         l1_folder_id = find_or_create_entity_folder(drive_service, entity_name, l1_root_id)
         if not l1_folder_id:
-            print(f"✗ Failed to find/create L1-Data folder for {entity_name}")
+            print(f"  ✗ Failed to find/create L1-Merged folder for {entity_name}")
             return False
-        print(f"✓ L1-Data folder ID: {l1_folder_id}")
+        print(f"  ✓ L1-Merged folder ID: {l1_folder_id}")
 
-        # 2. Find L0-Data entity folder
-        print(f"Finding L0-Data folder for {entity_name}...")
+        # 2. Find L0-Raw entity folder
+        print(f"Finding L0-Raw folder for {entity_name}...")
         l0_folder_id = find_or_create_entity_folder(drive_service, entity_name, l0_root_id)
         if not l0_folder_id:
-            print(f"✗ Failed to find L0-Data folder for {entity_name}")
+            print(f"  ✗ Failed to find L0-Raw folder for {entity_name}")
             return False
-        print(f"✓ L0-Data folder ID: {l0_folder_id}")
+        print(f"  ✓ L0-Raw folder ID: {l0_folder_id}")
 
         # 3. Handle spreadsheet creation/update: always clone template fresh
         print(f"Cloning template spreadsheet for {entity_name}...")
@@ -732,13 +663,13 @@ def process_entity(entity_name, creds, layout: DriveLayout):
         if not spreadsheet_id:
             print(f"✗ Failed to clone template spreadsheet for {entity_name}")
             return False
-        print(f"✓ Cloned spreadsheet ID: {spreadsheet_id}")
+        print(f"  ✓ Cloned spreadsheet ID: {spreadsheet_id}")
 
         # 4. Process CSV files and write to matching tabs
-        print(f"Processing CSV files from L0-Data...")
+        print(f"Processing CSV files from L0-Raw...")
         csv_files = list_csv_files_in_folder(drive_service, l0_folder_id)
         if not csv_files:
-            print(f"  ⚠️  No CSV files found in L0-Data folder for {entity_name}")
+            print(f"  ⚠️  No CSV files found in L0-Raw folder for {entity_name}")
         else:
             print(f"  Found {len(csv_files)} CSV file(s)")
 
@@ -768,10 +699,10 @@ def process_entity(entity_name, creds, layout: DriveLayout):
                 print(f"  CSV processing summary: {csv_success} succeeded, {csv_failed} failed")
 
         # 5. Copy image files (delete existing if present)
-        print(f"Copying image files from L0-Data to L1-Data...")
+        print(f"Copying image files from L0-Raw to L1-Merged...")
         image_files = list_image_files_in_folder(drive_service, l0_folder_id)
         if not image_files:
-            print(f"  ⚠️  No image files found in L0-Data folder for {entity_name}")
+            print(f"  ⚠️  No image files found in L0-Raw folder for {entity_name}")
         else:
             print(f"  Found {len(image_files)} image file(s)")
 
@@ -791,7 +722,6 @@ def process_entity(entity_name, creds, layout: DriveLayout):
 
                 print(f"  Image copying summary: {image_success} succeeded, {image_failed} failed")
 
-        print(f"\n✓ Successfully processed entity: {entity_name}")
         return True
 
     except Exception as e:
@@ -799,139 +729,3 @@ def process_entity(entity_name, creds, layout: DriveLayout):
         import traceback
         traceback.print_exc()
         return False
-
-
-def l1_generate(creds=None, layout: DriveLayout = None):
-    """
-    Generate L1-Data from L0-Data for entities marked for generation in entities.csv.
-
-    Args:
-        creds: Google OAuth credentials. If None, will be obtained automatically.
-        layout: DriveLayout object containing configuration. Required.
-
-    Returns:
-        dict: Dictionary with 'successful' and 'failed' lists of entity names
-
-    Raises:
-        FileNotFoundError: If service account credentials are not found
-        ValueError: If layout is not provided
-        Exception: Other errors during processing
-    """
-    if layout is None:
-        raise ValueError("layout (DriveLayout) is required. Pass it as a parameter.")
-
-    if creds is None:
-        creds = get_oauth_credentials()
-
-    # Load entity names from entities.csv with generate flag
-    if layout.entities_csv_id:
-        entities = load_entities(layout.entities_csv_id, creds)
-        print(f"✓ Loaded {len(entities)} entities with generate=Y from entities.csv")
-        if not entities:
-            print("\n✗ No entities marked with generate=Y in entities.csv.")
-            return {'successful': [], 'failed': []}
-    else:
-        print("\n✗ No entities CSV ID found in layout.")
-        return {'successful': [], 'failed': []}
-
-    print(f"\n✓ Processing {len(entities)} entities")
-    print(f"  Entities: {', '.join(entities)}\n")
-
-    # Process each entity
-    successful = []
-    failed = []
-
-    for i, entity in enumerate(entities, 1):
-        print(f"\n[{i}/{len(entities)}] Processing entity: {entity}")
-        if process_entity(entity, creds, layout):
-            successful.append(entity)
-        else:
-            failed.append(entity)
-
-        # Small delay to avoid rate limits
-        if i < len(entities):
-            time.sleep(0.5)
-
-    # Print summary
-    print(f"\n{'='*80}")
-    print("PROCESSING SUMMARY")
-    print(f"{'='*80}")
-    print(f"Total entities: {len(entities)}")
-    print(f"Successful: {len(successful)}")
-    print(f"Failed: {len(failed)}")
-    print()
-
-    if successful:
-        print("Successfully processed entities:")
-        for entity in successful:
-            print(f"  ✓ {entity}")
-        print()
-
-    if failed:
-        print("Failed entities:")
-        for entity in failed:
-            print(f"  ✗ {entity}")
-        print()
-
-    print("=" * 80)
-
-    return {'successful': successful, 'failed': failed}
-
-
-def main():
-    """
-    Main function to process entities (CLI entry point).
-    """
-    parser = argparse.ArgumentParser(
-        description='Generate L1-Data from L0-Data for entities with generate=Y in entities.csv'
-    )
-    parser.add_argument(
-        '--shared-drive-url',
-        required=True,
-        help='Shared Drive root URL or ID that contains L0/L1 data and templates.',
-    )
-    parser.add_argument(
-        '--service-account-credentials',
-        default=None,
-        help='Path to the service account JSON key file.',
-    )
-    args = parser.parse_args()
-
-    print("Google Slide Automator")
-    print("=" * 80)
-
-    try:
-        # Get credentials
-        print("Authenticating...")
-        creds = get_oauth_credentials(service_account_credentials=args.service_account_credentials)
-
-        layout = resolve_layout(args.shared_drive_url, creds)
-
-        # Call the main function
-        l1_generate(
-            creds=creds,
-            layout=layout
-        )
-
-    except ValueError as e:
-        print(f"\nError: {e}")
-    except FileNotFoundError as e:
-        print(f"\nError: {e}")
-        if "credentials file" in str(e):
-            print("\nTo set up service account credentials:")
-            print("1. Go to Google Cloud Console (https://console.cloud.google.com/)")
-            print("2. Create a new project or select an existing one")
-            print("3. Enable Google Sheets API and Google Drive API")
-            print("4. Go to 'Credentials' → 'Create Credentials' → 'Service account'")
-            print("5. Create a service account and download the JSON key file")
-            from .auth import PROJECT_ROOT as AUTH_PROJECT_ROOT
-            print(f"6. Save the JSON key file as 'service-account-credentials.json' in: {AUTH_PROJECT_ROOT}")
-    except Exception as e:
-        print(f"\nError: {e}")
-        import traceback
-        traceback.print_exc()
-
-
-if __name__ == "__main__":
-    main()
-

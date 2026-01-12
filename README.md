@@ -1,6 +1,6 @@
 # Google Slides Automator 📠
 
-This repository contains a python package for generating Google Slide reports for different combinations of entities for which the data is available. On a high level it works by replacing placeholders in a slide template with data from a Google Sheet.
+This repository contains a python package for generating Google Slide reports for different combinations of entities. It works by replacing placeholders in a slide template with data from a Google Sheets for each entity.
 
 Following elements in a slide can be replaced,
 1. Text placeholders in a paragraph
@@ -8,15 +8,15 @@ Following elements in a slide can be replaced,
 3. Tables
 4. Pictures
 
-The real value of this package is the ability to generate a report for different entities. By providing the raw data for each entity the package in a structured format the code can generate reports for each entity automatically. This is useful when you have a large number of entities and you want to generate reports of the same structure for each entity automatically.
+The real value of this package is the ability to generate a report for different entities. By providing the raw data for each entity the package in a structured format, the code can generate reports for each entity. This is useful when you have a large number of entities and you want to generate reports of the same structure.
 
 ## Getting Started
 
 Requirements to run the package are:
 
-1. Python 3.12 or above.
-2. Google Sheets, Slides and Drive API enabled service account credentials.
-3. Access to Google Drive Shared Drive containing slide and data templates and raw data.
+1. Python 3.11 or above.
+2. Google Sheets, Slides and Drive API enabled Google Clouds service account credentials.
+3. A shared Google Drive containing slide and data templates and raw data.
 
 ### Service Account Setup
 
@@ -67,16 +67,16 @@ The package works exclusively on **Shared** Google Drive files only. One of the 
 │   ├── entity-1.pdf
 │   ├── entity-2.pdf
 │   └── ...
-├── templates/
+├── Templates/
 │   ├── slide-template.gslide
 │   ├── data-template.gsheet
 │   └── ...
 └── entities.csv
 ```
 
-- **entities.csv** - A csv with three columns: first column is the entity name; the second column `Generate` controls processing and the third column `Slides` controls the slides to be generated for the entity. Rows with `Generate` set to `Y` are processed, while `N` (or blank) rows are skipped. Rows with `Slides` set to a number will generate only the slides with the given number. Numbers can be specific individually like `1,2,3` or a range like `1-3` or a combination of both like `1,2,3,5-7`.
+- **entities.csv** - A csv with four columns: first column is the entity name; the second column `L1` controls transformation for L0 to L1. It accepts a Y/N or empty values. The third column `L2` controls the slides to be generated for the entity. It accepts a number or a range of numbers or a combination of both like `1,2,3` or `1-3` or `1,2,3,5-7`. If you want to generate all slides, you can use `All` or leave it empty to not process slides. The fourth column `L3` controls the generation of the PDF report. It accepts a Y/N or empty values.
 
-- **data.csv** - A csv with the data for the entity. This csv will have the data for the entity and will be used to replace the placeholders in the slide template. This csv will have one row per placeholder with the value for that placeholder in column 2. An example of this csv is shown below.
+- **data.csv** - A csv with the data for the entity. This data in this csv will be used to replace the placeholders in the slide template. This csv will have one row per placeholder with the value for that placeholder in column 2. An example of this csv is shown below.
 
 ```
 brand_name_,Volvo
@@ -85,21 +85,21 @@ profit_margin,10.5%
 yearly_sales,100,123
 ```
 
-The placeholders in the slide template are of the format `{{<brand_name>}}`.
+The placeholders in the slide template are of the format `{{<placeholder_name>}}`.
 
-- **templates/** - This folder contains 2 files. A data template gsheet file and a slide template gslide file.
+- **Templates/** - This folder contains 2 files. A data template gsheet file and a slide template gslide file.
 ``
 The data template `data-template.gsheet` will have multiple sheets. Each sheet will have the data for a single element (chart/table). One sheet will have data for a element and there can be multiple elements in a spreadsheet.
 
-The main purpose of template is to create charts to be embedded into the Google Slide report.
+The main purpose of data template is to create charts to be embedded into the Google Slide report. The slide template is a Google Slide file with placeholders for the data.
 
-- **L0-Raw/**: Raw input data for each entity. This folder will have sub folders for each entity. Each entity folder will have the raw data for each slide and also the pictures used in the slides.
+- **L0-Raw/**: Raw input data for each entity which the user has to provide. This folder will have sub folders for each entity. Each entity folder will have the raw data for each slide and also the pictures used in the slides.
 
-- **L1-Merged/**: Processed and structured data—one spreadsheet per entity, used to generate charts. This folder will have sub folders for each entity. Each entity folder will have a spreadsheet for each slide and also the pictures used in the slides. The purpose of this folder is to generate charts from the data in the spreadsheets.
+- **L1-Merged/**: Processed and structured spreadsheet per entity, used to generate charts. This folder will have sub folders for each entity. Each entity folder will have a spreadsheet for each slide and also the pictures used in the slides. The purpose of this folder is to generate charts from the data in the spreadsheets.
 
-- **L2-Slides/**: Google Slide reports for each entity. These are generated by copying the slide template and replacing the placeholders with the data from the L1-Data sheet. This folder will have one slide per entity.
+- **L2-Slide/**: Google Slide reports for each entity. These are generated by cloning the slide template and replacing the placeholders with the data from the L1-Merged sheet. This folder will have one slide per entity.
 
-- **L3-PDFs/**: PDF reports for each entity. These are generated by converting the Google Slide reports to PDF format.
+- **L3-PDF/**: PDF reports for each entity. These are generated by converting the Google Slide reports to PDF format.
 
 Following is a workflow diagram to understand the flow.
 
@@ -111,7 +111,7 @@ https://drive.google.com/drive/u/0/folders/1EaaTMa5H6EOuWMom_4iE6RZ51qWYf2af
 
 ### Why is L0-Raw needed?
 
-Technically if you are able to generate data in the L1-Merged structure you do not need L0-Raw. However, not all programming languages have good API's to interact with Google Sheets like R. So to be compatible in such scenarios the library provides L0-Raw as just csv files. But if have the ability to generate merged datat for L1, skip L0 data generation.
+Technically, if you are able to generate data in the L1-Merged structure you do not need L0-Raw. However, not all programming languages have good API's to interact with Google Sheets like R. So to be compatible in such scenarios the library provides L0-Raw as just csv files. But if have the ability to generate merged data for L1, skip L0 data generation.
 
 ## Quick Start
 
@@ -119,62 +119,87 @@ In order to use the package you need to setup the drive and the package.
 
 ### Setup Drive
 
-### Package Usage
+Set a shared Google Drive with the structure like the example above. Create a `entities.csv` file in the root of the drive with the entities to process. An example of this csv is shown below.
 
-The library has 3 scripts to generate the data and reports.
+```
+entity_name,L1,L2,L3
+entity-1,Y,1,Y
+entity-2,Y,All,Y
+entity-3
+```
 
-1. l1_generate.py
-2. l2_generate.py
-3. l3_generate.py
+When you generate the report for the above configuration, the package will generate the L1-Merged, L2-Slide, and L3-PDF for the entities `entity-1` and `entity-2`. The entity `entity-3` will be skipped because it has L1 set to N.
 
-The l1_generate.py script is used to generate the data for the reports. The l2_generate.py script is used to generate the slides reports. The l3_generate.py script is used to generate the PDFs from the reports.
+### Setup Package
 
-These scripts can be used as follows:
+The library provides a unified interface to generate L1-Merged, L2-Slides, and L3-PDF. The processing is controlled by the `entities.csv` file, which specifies which entities to process and which levels to generate for each entity.
 
-### As a python package
+### Installation
 
-The library can be used as a python package by installing it using pip.
+Install the package using pip:
 
 ```
 pip install gslides_automator
 ```
 
-Then you can use the library in your python code.
+### Usage
+
+#### As a CLI tool
+
+After installation, you can use the library as a CLI tool:
 
 ```
-python -m gslides_automator.l1_generate --shared-drive-url <shared-drive-url> --service-account-credentials <service-account-credentials>
-python -m gslides_automator.l2_generate --shared-drive-url <shared-drive-url> --service-account-credentials <service-account-credentials>
-python -m gslides_automator.l3_generate --shared-drive-url <shared-drive-url> --service-account-credentials <service-account-credentials>
+gslides_automator generate --shared-drive-url <shared-drive-url> [--service-account-credentials <path>]
 ```
 
-### As a CLI tool
+**Arguments:**
+- `--shared-drive-url` (required): The Google Drive Shared Drive root URL or folder ID that contains L0/L1/L2/L3 data and templates.
+- `--service-account-credentials` (optional): Path to the service account JSON key file. Defaults to `service-account-credentials.json` in the project root.
 
-The library can be used as a CLI tool by installing it using pip.
-
+**Example:**
 ```
-pip install gslides_automator
-```
-
-Then you can use the library as a CLI tool.
-
-```
-gslides_automator l1_generate --shared-drive-url <shared-drive-url> --service-account-credentials <service-account-credentials>
+gslides_automator generate --shared-drive-url https://drive.google.com/drive/folders/1EaaTMa5H6EOuWMom_4iE6RZ51qWYf2af
 ```
 
-### As a package in RScript
+#### As a Python module
 
-The library can be used as a package in RScript by installing it using the following command.
-
-```
-install.packages("gslides_automator")
-```
-
-Then you can use the library in your RScript code.
+You can also run it as a Python module:
 
 ```
+python -m gslides_automator generate --shared-drive-url <shared-drive-url> [--service-account-credentials <path>]
+```
+
+#### As a Python API
+
+For programmatic usage, import and use the `generate` function:
+
+```python
+from gslides_automator import generate
+from gslides_automator.auth import get_oauth_credentials
+from gslides_automator.drive_layout import resolve_layout
+
+# Get credentials
+creds = get_oauth_credentials(service_account_credentials="path/to/credentials.json")
+
+# Resolve the drive layout
+layout = resolve_layout("https://drive.google.com/drive/folders/1EaaTMa5H6EOuWMom_4iE6RZ51qWYf2af", creds)
+
+# Generate reports
+result = generate(creds=creds, layout=layout)
+print(f"Successful: {result['successful']}")
+print(f"Failed: {result['failed']}")
+```
+
+The `generate` function processes all entities from `entities.csv` sequentially and returns a dictionary with `'successful'` and `'failed'` lists of entity names.
+
+#### As a package in RScript
+
+The library can be used from R using the `reticulate` package:
+
+```r
 library(reticulate)
 
-l1_generate_via_python <- function(
+generate_reports_via_python <- function(
   shared_drive_url,
   service_account_credentials,
   python_env = "/path/to/python-env"
@@ -182,16 +207,19 @@ l1_generate_via_python <- function(
   reticulate::use_virtualenv(python_env, required = TRUE)
 
   ga <- reticulate::import("gslides_automator")
+  auth <- reticulate::import("gslides_automator.auth")
+  drive_layout <- reticulate::import("gslides_automator.drive_layout")
 
-  ga$l1_generate(
-    shared_drive_url = shared_drive_url,
-    service_account_credentials = service_account_credentials
-  )
+  creds <- auth$get_oauth_credentials(service_account_credentials = service_account_credentials)
+  layout <- drive_layout$resolve_layout(shared_drive_url, creds)
+
+  result <- ga$generate(creds = creds, layout = layout)
+  return(result)
 }
 
-result <- l1_generate_via_python(
+result <- generate_reports_via_python(
   shared_drive_url = "https://drive.google.com/drive/folders/00000000000000",
-  service_account_credentials = "/path/to/service-account-credentials.json",
+  service_account_credentials = "/path/to/service-account-credentials.json"
 )
 print(result)
 ```

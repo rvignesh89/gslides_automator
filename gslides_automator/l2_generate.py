@@ -71,7 +71,7 @@ def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_del
                         error_msg = "Rate limit exceeded (429)"
                     else:
                         error_msg = f"Server error ({status})"
-                    print(f"    ⚠️  {error_msg}. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})")
+                    print(f"  ⚠️  {error_msg}. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})")
                     time.sleep(wait_time)
                     delay *= backoff_factor
                 else:
@@ -79,7 +79,7 @@ def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_del
                         error_msg = "Rate limit exceeded (429)"
                     else:
                         error_msg = f"Server error ({status})"
-                    print(f"    ✗ {error_msg}. Max retries ({max_retries}) reached.")
+                    print(f"  ✗ {error_msg}. Max retries ({max_retries}) reached.")
                     raise
             else:
                 # For non-retryable errors, re-raise immediately
@@ -302,13 +302,13 @@ def read_table_from_sheet(spreadsheet_id, sheet_name, creds):
         try:
             worksheet = spreadsheet.worksheet(sheet_name)
         except gspread.exceptions.WorksheetNotFound:
-            print(f"    ⚠️  Table sheet '{sheet_name}' not found in spreadsheet")
+            print(f"  ⚠️  Table sheet '{sheet_name}' not found in spreadsheet")
             return None
 
         values = worksheet.get_all_values()
         return values or []
     except Exception as e:
-        print(f"    ⚠️  Error reading table data from sheet '{sheet_name}': {e}")
+        print(f"  ⚠️  Error reading table data from sheet '{sheet_name}': {e}")
         return None
 
 def delete_existing_presentation(entity_name, output_folder_id, creds):
@@ -358,11 +358,11 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
                             from .auth import get_service_account_email
                             service_account_email = get_service_account_email()
                             print(f"  ⚠️  Presentation '{file['name']}' not accessible to service account.")
-                            print(f"      Service account email: {service_account_email}")
-                            print(f"      Please ensure the file is shared with this service account with 'Editor' permissions.")
+                            print(f"    Service account email: {service_account_email}")
+                            print(f"    Please ensure the file is shared with this service account with 'Editor' permissions.")
                         except Exception:
                             print(f"  ⚠️  Presentation '{file['name']}' not accessible to service account.")
-                            print(f"      Please ensure the file is shared with your service account with 'Editor' permissions.")
+                            print(f"    Please ensure the file is shared with your service account with 'Editor' permissions.")
                         continue
                     else:
                         print(f"  ⚠️  Error checking presentation access: {check_error}")
@@ -383,21 +383,21 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
                             from .auth import get_service_account_email
                             service_account_email = get_service_account_email()
                             print(f"  ⚠️  Error deleting presentation '{file['name']}': File not found or not accessible.")
-                            print(f"      Service account email: {service_account_email}")
-                            print(f"      Please ensure the file is shared with this service account with 'Editor' permissions.")
+                            print(f"    Service account email: {service_account_email}")
+                            print(f"    Please ensure the file is shared with this service account with 'Editor' permissions.")
                         except Exception:
                             print(f"  ⚠️  Error deleting presentation '{file['name']}': File not found or not accessible.")
-                            print(f"      Please ensure the file is shared with your service account with 'Editor' permissions.")
+                            print(f"    Please ensure the file is shared with your service account with 'Editor' permissions.")
                     elif error.resp.status == 403:
                         try:
                             from .auth import get_service_account_email
                             service_account_email = get_service_account_email()
                             print(f"  ⚠️  Error deleting presentation '{file['name']}': Permission denied.")
-                            print(f"      Service account email: {service_account_email}")
-                            print(f"      Please ensure the file is shared with this service account with 'Editor' permissions.")
+                            print(f"    Service account email: {service_account_email}")
+                            print(f"    Please ensure the file is shared with this service account with 'Editor' permissions.")
                         except Exception:
                             print(f"  ⚠️  Error deleting presentation '{file['name']}': Permission denied.")
-                            print(f"      Please ensure the file is shared with your service account with 'Editor' permissions.")
+                            print(f"    Please ensure the file is shared with your service account with 'Editor' permissions.")
                     else:
                         print(f"  ⚠️  Error deleting existing presentation {file['name']}: {error}")
                     return False
@@ -459,11 +459,11 @@ def find_existing_presentation(entity_name, output_folder_id, creds):
                         from .auth import get_service_account_email
                         service_account_email = get_service_account_email()
                         print(f"  ⚠️  Presentation '{files[0]['name']}' not accessible to service account.")
-                        print(f"      Service account email: {service_account_email}")
-                        print(f"      Please ensure the file is shared with this service account with 'Editor' permissions.")
+                        print(f"    Service account email: {service_account_email}")
+                        print(f"    Please ensure the file is shared with this service account with 'Editor' permissions.")
                     except Exception:
                         print(f"  ⚠️  Presentation '{files[0]['name']}' not accessible to service account.")
-                        print(f"      Please ensure the file is shared with your service account with 'Editor' permissions.")
+                        print(f"    Please ensure the file is shared with your service account with 'Editor' permissions.")
                 else:
                     print(f"  ⚠️  Error checking presentation access: {check_error}")
                 return None
@@ -525,19 +525,19 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
             global _TABLE_SLIDE_PROCEED_DECISION
             slide_list = ', '.join(str(s) for s in sorted(table_slides))
             print(f"⚠️  Slide(s) {slide_list} contain table elements.")
-            print("    Per-slide regeneration is not supported for slides with tables, as tables cannot be recreated with proper formatting via the API.")
-            print("    You may lose table formatting or experience unexpected behavior if you choose to proceed.")
+            print("  Per-slide regeneration is not supported for slides with tables, as tables cannot be recreated with proper formatting via the API.")
+            print("  You may lose table formatting or experience unexpected behavior if you choose to proceed.")
             if _TABLE_SLIDE_PROCEED_DECISION is None:
                 proceed = None
                 while proceed not in ("y", "yes", "n", "no"):
                     proceed = input("Do you wish to continue anyway? (y/N): ").strip().lower() or "n"
                 _TABLE_SLIDE_PROCEED_DECISION = proceed in ("y", "yes")
-                print("    Your choice will be remembered for all future entities in this session.")
+                print("  Your choice will be remembered for all future entities in this session.")
             elif not _TABLE_SLIDE_PROCEED_DECISION:
                 print("✗ Cancelling processing as per stored user preference.")
                 return False
             else:
-                print("    Proceeding automatically based on stored preference to continue despite tables.")
+                print("  Proceeding automatically based on stored preference to continue despite tables.")
 
         # Delete target slides first (in reverse order to maintain indices)
         delete_requests = []
@@ -856,7 +856,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                         column_count = len(table_columns)
 
                         if row_count == 0 or column_count == 0:
-                            print(f"    ⚠️  Warning: Table element missing rows or columns, skipping")
+                            print(f"  ⚠️  Warning: Table element missing rows or columns, skipping")
                             continue
 
                         new_table_id = str(uuid.uuid4()).replace('-', '')[:26]
@@ -1155,7 +1155,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
 
                             copy_requests.append(create_image_request)
                         else:
-                            print(f"    ⚠️  Warning: Image element found but no URL available, skipping")
+                            print(f"  ⚠️  Warning: Image element found but no URL available, skipping")
 
                 # Execute copy requests in batches
                 if copy_requests:
@@ -1339,7 +1339,7 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
             pass
 
         # If no image found, return None
-        print(f"    ⚠️  No image file found matching 'picture-{picture_name}' in entity folder")
+        print(f"  ⚠️  No image file found matching 'picture-{picture_name}' in entity folder")
         return None
 
     except HttpError as error:
@@ -1552,10 +1552,10 @@ def replace_textbox_with_chart(presentation_id, slide_id, slide_number, textbox_
                                 try:
                                     retry_with_exponential_backoff(execute_order_update)
                                 except HttpError as order_error:
-                                    print(f"    ⚠️  Warning: Could not restore z-order position: {order_error}")
+                                    print(f"  ⚠️  Warning: Could not restore z-order position: {order_error}")
                         break
 
-        print(f"    ✓ Replaced textbox with chart from sheet '{sheet_name}' in slide {slide_number}")
+        print(f"  ✓ Replaced textbox with chart from sheet '{sheet_name}' in slide {slide_number}")
         return True
     except HttpError as error:
         print(f"Error replacing textbox with chart in slide {slide_number}: {error}")
@@ -1653,6 +1653,7 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
 
     if not is_url:
         # It's a Drive file ID - temporarily grant public access
+        print(f"  🏞️ Image url is a drive file")
         file_id = image_url_or_file_id
 
         try:
@@ -1838,7 +1839,7 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
                                 try:
                                     retry_with_exponential_backoff(execute_order_update)
                                 except HttpError as order_error:
-                                    print(f"    ⚠️  Warning: Could not restore z-order position: {order_error}")
+                                    print(f"  ⚠️  Warning: Could not restore z-order position: {order_error}")
                         break
 
         print(f"    ✓ Replaced textbox with image in slide {slide_number}")
@@ -1857,7 +1858,9 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
                 ).execute()
                 print(f"    ℹ️  Revoked temporary public access from image file")
             except HttpError as revoke_error:
-                print(f"    ⚠️  Warning: Could not revoke temporary public access: {revoke_error}")
+                print(f"    ⚠️  Warning: Could not revoke temporary public access: {revoke_error}. \n You should manually revoke the public access from the file.")
+                print(f"      File id: {image_url_or_file_id}")
+                print(f"      Permission id: {permission_id}")
 
 def replace_multiple_placeholders_in_textbox(presentation_id, slide_number, textbox_element, placeholder_map, creds):
     """
@@ -1924,6 +1927,9 @@ def replace_multiple_placeholders_in_textbox(presentation_id, slide_number, text
     # Find all placeholders and their positions
     placeholder_positions = []
     for placeholder_text, replacement_text in placeholder_map.items():
+        if not replacement_text:
+            continue
+
         start_pos = 0
         while True:
             pos = full_text.find(placeholder_text, start_pos)
@@ -2004,7 +2010,7 @@ def replace_multiple_placeholders_in_textbox(presentation_id, slide_number, text
     try:
         response = retry_with_exponential_backoff(execute_batch_update)
         replaced_count = len(placeholder_positions)
-        print(f"    ✓ Replaced {replaced_count} placeholder(s) in slide {slide_number}")
+        print(f"  ✓ Replaced {replaced_count} placeholder(s) in slide {slide_number}")
         return True
     except HttpError as error:
         print(f"Error replacing multiple placeholders in slide {slide_number}: {error}")
@@ -2019,7 +2025,7 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
     table_rows = table.get('tableRows', [])
 
     if not table_rows or not table_id:
-        print(f"    ⚠️  Table on slide {slide_number} has no rows or objectId, skipping")
+        print(f"  ⚠️  Table on slide {slide_number} has no rows or objectId, skipping")
         return False
 
     num_rows = len(table_rows)
@@ -2028,7 +2034,7 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
         num_cols = max(num_cols, len(row.get('tableCells', [])))
 
     if num_cols == 0:
-        print(f"    ⚠️  Table on slide {slide_number} has no columns, skipping")
+        print(f"  ⚠️  Table on slide {slide_number} has no columns, skipping")
         return False
 
     # Determine data dimensions
@@ -2038,7 +2044,7 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
     # If we need more rows, add them before populating
     if data_rows > num_rows:
         rows_to_add = data_rows - num_rows
-        print(f"    ℹ️  Adding {rows_to_add} row(s) to table on slide {slide_number} to accommodate data")
+        print(f"  ℹ️  Adding {rows_to_add} row(s) to table on slide {slide_number} to accommodate data")
 
         # Google Slides API limits: max 20 rows per insertTableRows request
         max_rows_per_request = 20
@@ -2077,12 +2083,12 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
             # Update num_rows to reflect the new table size
             num_rows = data_rows
         except HttpError as error:
-            print(f"    ⚠️  Error adding rows to table on slide {slide_number}: {error}")
+            print(f"  ⚠️  Error adding rows to table on slide {slide_number}: {error}")
             return False
 
     # Warn if data has more columns than table (we can't add columns easily)
     if data_cols > num_cols:
-        print(f"    ⚠️  Table data for slide {slide_number} has more columns ({data_cols}) than the table ({num_cols}). Extra columns will be ignored.")
+        print(f"  ⚠️  Table data for slide {slide_number} has more columns ({data_cols}) than the table ({num_cols}). Extra columns will be ignored.")
 
     # Reuse the first available text style in a cell so formatting stays consistent
     writable_text_style_fields = [
@@ -2215,10 +2221,10 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
                 presentationId=presentation_id,
                 body={'requests': requests[i:i + batch_size]}
             ).execute()
-        print(f"    ✓ Populated table on slide {slide_number}")
+        print(f"  ✓ Populated table on slide {slide_number}")
         return True
     except HttpError as error:
-        print(f"    ⚠️  Error populating table on slide {slide_number}: {error}")
+        print(f"  ⚠️  Error populating table on slide {slide_number}: {error}")
         return False
 
 def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_name, data_sheet, entity_folder_id, creds, slides: Optional[Set[int]] = None):
@@ -2272,7 +2278,7 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
 
             slide_id = slide.get('objectId')
 
-            print(f"\nProcessing slide {slide_number}...")
+            print(f"Processing slide {slide_number}:")
 
             # Loop through all elements in the slide
             for page_element in slide.get('pageElements', []):
@@ -2308,12 +2314,12 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
                             response = input(f"Multiple references to table '{table_name}' detected. Continue replacing everywhere? [y/N]: ").strip().lower()
                             table_decisions[table_name] = response in ('y', 'yes')
                         if not table_decisions.get(table_name, False):
-                            print(f"    ✗ Stopping at duplicate table '{table_name}' per user choice.")
+                            print(f"  ✗ Stopping at duplicate table '{table_name}' per user choice.")
                             return False
                         table_values = table_data_cache[table_name]
 
                     if table_values is None:
-                        print(f"    ⚠️  Skipping table '{table_name}' on slide {slide_number} due to missing data")
+                        print(f"  ⚠️  Skipping table '{table_name}' on slide {slide_number} due to missing data")
                         continue
 
                     success = populate_table_with_data(
@@ -2324,7 +2330,7 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
                         table_data=table_values
                     )
                     if not success:
-                        print(f"    ⚠️  Failed to populate table '{table_name}' on slide {slide_number}")
+                        print(f"  ⚠️  Failed to populate table '{table_name}' on slide {slide_number}")
                     continue
 
                 # Only process text elements (shapes with text)
@@ -2356,9 +2362,9 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
                                 creds=creds
                             )
                             if not success:
-                                print(f"    ⚠️  Failed to replace chart placeholder: {placeholder_name}")
+                                print(f"  ⚠️  Failed to replace chart placeholder: {placeholder_name}")
                         else:
-                            print(f"    ⚠️  No mapping found for chart placeholder: {placeholder_name} in slide {slide_number}")
+                            print(f"  ⚠️  No mapping found for chart placeholder: {placeholder_name} in slide {slide_number}")
                         continue  # Skip further processing for chart placeholders
 
                     # Check for {{picture-placeholder_name}} format and replace with image
@@ -2383,9 +2389,9 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
                                 creds=creds
                             )
                             if not success:
-                                print(f"    ⚠️  Failed to replace picture placeholder: {placeholder_name}")
+                                print(f"  ⚠️  Failed to replace picture placeholder: {placeholder_name}")
                         else:
-                            print(f"    ⚠️  No image found matching 'picture-{placeholder_name}' in entity folder")
+                            print(f"  ⚠️  No image found matching 'picture-{placeholder_name}' in entity folder")
                         continue  # Skip further processing for picture placeholders
 
                     # Collect all placeholders to replace (entity_name + data sheet placeholders)
@@ -2416,7 +2422,7 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
                             creds=creds
                         )
                         if not success:
-                            print(f"    ⚠️  Failed to replace placeholders in slide {slide_number}")
+                            print(f"  ⚠️  Failed to replace placeholders in slide {slide_number}")
 
         return True
 
@@ -2440,10 +2446,6 @@ def process_spreadsheet(spreadsheet_id, spreadsheet_name, template_id, output_fo
     Returns:
         str: ID of the created presentation, or None if failed
     """
-    print(f"\n{'='*80}")
-    print(f"Processing spreadsheet: {spreadsheet_name}")
-    print(f"{'='*80}\n")
-
     # Initialize services
     gspread_client = gspread.authorize(creds)
 
@@ -2542,7 +2544,7 @@ def process_spreadsheet(spreadsheet_id, spreadsheet_name, template_id, output_fo
         print(f"✓ Presentation created successfully!")
         print(f"  Presentation ID: {presentation_id}")
         print(f"  View at: https://docs.google.com/presentation/d/{presentation_id}/edit")
-        print(f"{'='*80}\n")
+        print(f"{'='*80}")
 
         return presentation_id
 
@@ -2551,211 +2553,3 @@ def process_spreadsheet(spreadsheet_id, spreadsheet_name, template_id, output_fo
         import traceback
         traceback.print_exc()
         return None
-
-def l2_generate(creds=None, layout: DriveLayout = None, input_folder_id=None, template_id=None, output_folder_id=None):
-    """
-    Generate Google Slides presentations from Google Sheets for entities marked for generation in entities.csv.
-
-    Args:
-        creds: Google OAuth credentials. If None, will be obtained automatically.
-        layout: DriveLayout object containing configuration. Required if not using individual folder IDs.
-        input_folder_id: Input folder ID. If None, uses layout.l1_data_id.
-        template_id: Template presentation ID. If None, uses layout.report_template_id.
-        output_folder_id: Output folder ID. If None, uses layout.l2_report_id.
-
-    Returns:
-        dict: Dictionary with 'successful' (list of tuples (entity_name, presentation_id))
-              and 'failed' (list of tuples (entity_name, error_message))
-
-    Raises:
-        FileNotFoundError: If service account credentials are not found
-        ValueError: If neither layout nor all individual folder IDs are provided
-        Exception: Other errors during processing
-    """
-    if creds is None:
-        creds = get_oauth_credentials()
-
-    # Use layout if provided, otherwise use individual parameters
-    if layout is not None:
-        if input_folder_id is None:
-            input_folder_id = layout.l1_data_id
-        if template_id is None:
-            template_id = layout.report_template_id
-        if output_folder_id is None:
-            output_folder_id = layout.l2_report_id
-    elif input_folder_id is None or template_id is None or output_folder_id is None:
-        raise ValueError("Either layout (DriveLayout) must be provided, or all of input_folder_id, template_id, and output_folder_id must be provided.")
-
-    print(f"Input folder: {input_folder_id}")
-    print(f"Template: {template_id}")
-    print(f"Output folder: {output_folder_id}\n")
-
-    # Determine which entities to process
-    if layout and layout.entities_csv_id:
-        target_entities = load_entities_with_slides(layout.entities_csv_id, creds)
-        print(f"Loaded {len(target_entities)} entities with generate=Y from entities.csv\n")
-        if not target_entities:
-            print("✗ No entities marked with generate=Y in entities.csv.")
-            return {'successful': [], 'failed': []}
-    else:
-        print("\n✗ No entities CSV ID found in layout.")
-        return {'successful': [], 'failed': []}
-
-    # List all entity folders in the input folder
-    print("Scanning input folder for entity folders...")
-    all_entity_folders = list_entity_folders(input_folder_id, creds)
-
-    if not all_entity_folders:
-        print("No entity folders found in the input folder!")
-        return {'successful': [], 'failed': []}
-
-    # Filter to only include target entities
-    entity_folders = []
-    for folder_id, folder_name in all_entity_folders:
-        if folder_name in target_entities:
-            entity_folders.append((folder_id, folder_name))
-
-    if not entity_folders:
-        print(f"✗ No matching entity folders found for entities marked generate=Y.")
-        print(f"  Available folders: {', '.join([name for _, name in all_entity_folders])}")
-        print(f"  Requested entities: {', '.join(target_entities)}")
-        return {'successful': [], 'failed': []}
-
-    print(f"Found {len(entity_folders)} matching entity folder(s) to process:\n")
-    for folder_id, folder_name in entity_folders:
-        print(f"  - {folder_name} (ID: {folder_id})")
-    print()
-
-    # Process each entity folder
-    successful = []
-    failed = []
-
-    for entity_folder_id, entity_name in entity_folders:
-        try:
-            # Find spreadsheets in this entity folder
-            print(f"\nProcessing entity: {entity_name}")
-            spreadsheets = list_spreadsheets_in_folder(entity_folder_id, creds)
-
-            if not spreadsheets:
-                print(f"  ⚠️  No spreadsheets found in entity folder '{entity_name}'")
-                failed.append((entity_name, "No spreadsheets found"))
-                continue
-
-            if len(spreadsheets) > 1:
-                print(f"  ⚠️  Multiple spreadsheets found in entity folder '{entity_name}', processing the first one")
-
-            # Process the first spreadsheet in the entity folder
-            spreadsheet_id, spreadsheet_name = spreadsheets[0]
-
-            slides_to_process = target_entities.get(entity_name)
-            slide_list_msg = "all slides" if not slides_to_process else ", ".join(str(n) for n in sorted(slides_to_process))
-            print(f"  Slides to generate: {slide_list_msg}")
-
-            # Process the spreadsheet
-            presentation_id = process_spreadsheet(
-                spreadsheet_id=spreadsheet_id,
-                spreadsheet_name=entity_name,
-                template_id=template_id,
-                output_folder_id=output_folder_id,
-                entity_folder_id=entity_folder_id,
-                creds=creds,
-                slides=slides_to_process,
-            )
-
-            if presentation_id:
-                successful.append((entity_name, presentation_id))
-            else:
-                failed.append((entity_name, "Processing returned None"))
-
-        except Exception as e:
-            print(f"\n{'='*80}")
-            print(f"✗ Error processing entity '{entity_name}': {e}")
-            print(f"{'='*80}\n")
-            failed.append((entity_name, str(e)))
-            import traceback
-            traceback.print_exc()
-            # Continue processing other entities
-            continue
-
-    # Print summary
-    print("\n" + "=" * 80)
-    print("PROCESSING SUMMARY")
-    print("=" * 80)
-    print(f"Total entities processed: {len(entity_folders)}")
-    print(f"Successful: {len(successful)}")
-    print(f"Failed: {len(failed)}")
-    print()
-
-    if successful:
-        print("Successfully processed entities:")
-        for entity_name, presentation_id in successful:
-            print(f"  ✓ {entity_name}")
-            print(f"    View at: https://docs.google.com/presentation/d/{presentation_id}/edit")
-        print()
-
-    if failed:
-        print("Failed entities:")
-        for entity_name, error in failed:
-            print(f"  ✗ {entity_name}: {error}")
-        print()
-
-    print("=" * 80)
-
-    return {'successful': successful, 'failed': failed}
-
-
-def main():
-    """
-    Main function to process all spreadsheets in the input folder and generate presentations (CLI entry point).
-    """
-    parser = argparse.ArgumentParser(
-        description='Generate Google Slides presentations from Google Sheets for entities with generate=Y in entities.csv'
-    )
-    parser.add_argument(
-        '--shared-drive-url',
-        required=True,
-        help='Shared Drive root URL or ID that contains L1/L2 data, templates and entities file.',
-    )
-    parser.add_argument(
-        '--service-account-credentials',
-        default=None,
-        help='Path to the service account JSON key file.',
-    )
-    args = parser.parse_args()
-
-    print("Google Slide Automator - Report Generation")
-    print("=" * 80)
-
-    try:
-        # Get credentials
-        print("Authenticating...")
-        creds = get_oauth_credentials(service_account_credentials=args.service_account_credentials)
-
-        layout = resolve_layout(args.shared_drive_url, creds)
-
-        # Call the main function
-        l2_generate(
-            creds=creds,
-            layout=layout
-        )
-
-    except ValueError as e:
-        print(f"\nError: {e}")
-    except FileNotFoundError as e:
-        print(f"\nError: {e}")
-        if "credentials file" in str(e):
-            print("\nTo set up service account credentials:")
-            print("1. Go to Google Cloud Console (https://console.cloud.google.com/)")
-            print("2. Create a new project or select an existing one")
-            print("3. Enable Google Sheets API, Google Slides API, and Google Drive API")
-            print("4. Go to 'Credentials' → 'Create Credentials' → 'Service account'")
-            print("5. Create a service account and download the JSON key file")
-            from .auth import PROJECT_ROOT as AUTH_PROJECT_ROOT
-            print(f"6. Save the JSON key file as 'service-account-credentials.json' in: {AUTH_PROJECT_ROOT}")
-    except Exception as e:
-        print(f"\nError: {e}")
-        import traceback
-        traceback.print_exc()
-
-if __name__ == "__main__":
-    main()
