@@ -61,9 +61,9 @@ def export_slide_to_pdf(slide_id: str, entity_name: str, l3_folder_id: str, cred
         pdf_filename = f"{entity_name}.pdf"
         existing_pdf_id = find_existing_file(drive_service, pdf_filename, l3_folder_id)
         if existing_pdf_id:
-            print(f"    Found existing PDF, deleting...")
+            print("    Found existing PDF, deleting...")
             if not delete_file(drive_service, existing_pdf_id):
-                print(f"    ✗ Failed to delete existing PDF")
+                print("    ✗ Failed to delete existing PDF")
                 return False
 
         # Upload the PDF to L3-PDF folder
@@ -89,7 +89,7 @@ def export_slide_to_pdf(slide_id: str, entity_name: str, l3_folder_id: str, cred
             print(f"    ✓ PDF exported successfully: {entity_name}.pdf")
             return True
         else:
-            print(f"    ✗ Failed to export PDF")
+            print("    ✗ Failed to export PDF")
             return False
     except HttpError as error:
         print(f"    ✗ Error exporting PDF: {error}")

@@ -4,14 +4,12 @@ Tests for l1_generate module.
 
 from __future__ import annotations
 
-import pytest
 from googleapiclient.discovery import build
 
 from gslides_automator.generate import generate
 from tests.test_utils import (
     create_test_l0_data,
     get_spreadsheet_data,
-    verify_drive_structure,
 )
 
 

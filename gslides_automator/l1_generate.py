@@ -15,16 +15,13 @@ import sys
 import time
 import csv
 import io
-import argparse
-import re
 
 # Add project root to path to import auth module
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
 
-from gslides_automator.drive_layout import load_entities, resolve_layout, DriveLayout
-from gslides_automator.auth import get_oauth_credentials
+from gslides_automator.drive_layout import DriveLayout
 
 def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_delay=60, backoff_factor=2):
     """
@@ -147,12 +144,12 @@ def delete_file(drive_service, file_id):
             try:
                 from .auth import get_service_account_email
                 service_account_email = get_service_account_email()
-                print(f"  ⚠️  File not found or not accessible to service account.")
+                print("  ⚠️  File not found or not accessible to service account.")
                 print(f"      Service account email: {service_account_email}")
-                print(f"      Please ensure the file is shared with this service account with 'Editor' permissions.")
+                print("      Please ensure the file is shared with this service account with 'Editor' permissions.")
             except Exception:
-                print(f"  ⚠️  File not found or not accessible to service account.")
-                print(f"      Please ensure the file is shared with your service account with 'Editor' permissions.")
+                print("  ⚠️  File not found or not accessible to service account.")
+                print("      Please ensure the file is shared with your service account with 'Editor' permissions.")
             return False
         else:
             print(f"  ⚠️  Error checking file access: {check_error}")
@@ -174,20 +171,20 @@ def delete_file(drive_service, file_id):
                 service_account_email = get_service_account_email()
                 print(f"  ⚠️  Error deleting file '{file_name}': File not found or not accessible.")
                 print(f"      Service account email: {service_account_email}")
-                print(f"      Please ensure the file is shared with this service account with 'Editor' permissions.")
+                print("      Please ensure the file is shared with this service account with 'Editor' permissions.")
             except Exception:
                 print(f"  ⚠️  Error deleting file '{file_name}': File not found or not accessible.")
-                print(f"      Please ensure the file is shared with your service account with 'Editor' permissions.")
+                print("      Please ensure the file is shared with your service account with 'Editor' permissions.")
         elif error.resp.status == 403:
             try:
                 from .auth import get_service_account_email
                 service_account_email = get_service_account_email()
                 print(f"  ⚠️  Error deleting file '{file_name}': Permission denied.")
                 print(f"      Service account email: {service_account_email}")
-                print(f"      Please ensure the file is shared with this service account with 'Editor' permissions.")
+                print("      Please ensure the file is shared with this service account with 'Editor' permissions.")
             except Exception:
                 print(f"  ⚠️  Error deleting file '{file_name}': Permission denied.")
-                print(f"      Please ensure the file is shared with your service account with 'Editor' permissions.")
+                print("      Please ensure the file is shared with your service account with 'Editor' permissions.")
         else:
             print(f"  ⚠️  Error deleting file '{file_name}': {error}")
         return False
@@ -261,11 +258,11 @@ def clone_template_to_entity(drive_service, template_id, entity_name, folder_id)
     # Check if file already exists
     existing_file_id = find_existing_file(drive_service, file_name, folder_id)
     if existing_file_id:
-        print(f"  Found existing spreadsheet, deleting...")
+        print("  Found existing spreadsheet, deleting...")
         if delete_file(drive_service, existing_file_id):
-            print(f"  ✓ Deleted existing spreadsheet")
+            print("  ✓ Deleted existing spreadsheet")
         else:
-            print(f"  ✗ Failed to delete existing spreadsheet")
+            print("  ✗ Failed to delete existing spreadsheet")
             return None
 
     def _copy_template():
@@ -310,9 +307,9 @@ def clone_template_to_entity(drive_service, template_id, entity_name, folder_id)
         return new_file_id
     except HttpError as error:
         if error.resp.status == 404:
-            print(f"Error: Template file not found (404). The file may have been deleted or you don't have access.")
+            print("Error: Template file not found (404). The file may have been deleted or you don't have access.")
         elif error.resp.status == 403:
-            print(f"Error: Permission denied (403). You may not have permission to copy this file.")
+            print("Error: Permission denied (403). You may not have permission to copy this file.")
         else:
             print(f"Error copying template: {error}")
         return None
@@ -572,9 +569,9 @@ def copy_image_to_folder(drive_service, source_file_id, destination_folder_id, f
     if existing_file_id:
         print(f"    Found existing image '{file_name}', deleting...")
         if delete_file(drive_service, existing_file_id):
-            print(f"    ✓ Deleted existing image")
+            print("    ✓ Deleted existing image")
         else:
-            print(f"    ✗ Failed to delete existing image")
+            print("    ✗ Failed to delete existing image")
             return None
 
     def _copy_file():
@@ -666,7 +663,7 @@ def process_entity(entity_name, creds, layout: DriveLayout):
         print(f"  ✓ Cloned spreadsheet ID: {spreadsheet_id}")
 
         # 4. Process CSV files and write to matching tabs
-        print(f"Processing CSV files from L0-Raw...")
+        print("Processing CSV files from L0-Raw...")
         csv_files = list_csv_files_in_folder(drive_service, l0_folder_id)
         if not csv_files:
             print(f"  ⚠️  No CSV files found in L0-Raw folder for {entity_name}")
@@ -684,7 +681,7 @@ def process_entity(entity_name, creds, layout: DriveLayout):
                     # Download CSV
                     csv_data = download_csv_from_drive(drive_service, file_id)
                     if not csv_data:
-                        print(f"    ✗ Failed to download CSV file")
+                        print("    ✗ Failed to download CSV file")
                         csv_failed += 1
                         continue
 
@@ -699,7 +696,7 @@ def process_entity(entity_name, creds, layout: DriveLayout):
                 print(f"  CSV processing summary: {csv_success} succeeded, {csv_failed} failed")
 
         # 5. Copy image files (delete existing if present)
-        print(f"Copying image files from L0-Raw to L1-Merged...")
+        print("Copying image files from L0-Raw to L1-Merged...")
         image_files = list_image_files_in_folder(drive_service, l0_folder_id)
         if not image_files:
             print(f"  ⚠️  No image files found in L0-Raw folder for {entity_name}")

@@ -4,14 +4,12 @@ Integration tests for end-to-end workflows.
 
 from __future__ import annotations
 
-import pytest
 from googleapiclient.discovery import build
 
 from gslides_automator.generate import generate
 from tests.test_utils import (
     get_spreadsheet_data,
     get_slide_text_content,
-    verify_drive_structure,
 )
 
 

@@ -7,16 +7,12 @@ from __future__ import annotations
 import os
 import pytest
 import uuid
-from typing import Generator
 
-from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 from gslides_automator.auth import get_oauth_credentials
-from gslides_automator.drive_layout import DriveLayout, resolve_layout
 from tests.test_utils import (
     create_test_drive_structure,
-    cleanup_test_drive,
     create_test_entities_csv,
     create_test_data_template,
     create_test_slide_template,

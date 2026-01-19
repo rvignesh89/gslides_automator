@@ -12,12 +12,9 @@ import os
 import sys
 import re
 import time
-import json
-import argparse
 from typing import Optional, Set
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from google.auth.transport.requests import Request
 
 _TABLE_SLIDE_PROCEED_DECISION: Optional[bool] = None  # Session-level choice for table slide regeneration
 
@@ -32,8 +29,7 @@ try:
         resolve_layout,
     )
 except ImportError:  # Fallback for package-relative execution
-    from .auth import get_oauth_credentials
-    from .drive_layout import DriveLayout, load_entities_with_slides, resolve_layout
+    pass
 
 def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_delay=60, backoff_factor=2):
     """
@@ -84,7 +80,7 @@ def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_del
             else:
                 # For non-retryable errors, re-raise immediately
                 raise
-        except Exception as e:
+        except Exception:
             # For non-HttpError exceptions, re-raise immediately
             raise
 
@@ -359,10 +355,10 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
                             service_account_email = get_service_account_email()
                             print(f"  ⚠️  Presentation '{file['name']}' not accessible to service account.")
                             print(f"    Service account email: {service_account_email}")
-                            print(f"    Please ensure the file is shared with this service account with 'Editor' permissions.")
+                            print("    Please ensure the file is shared with this service account with 'Editor' permissions.")
                         except Exception:
                             print(f"  ⚠️  Presentation '{file['name']}' not accessible to service account.")
-                            print(f"    Please ensure the file is shared with your service account with 'Editor' permissions.")
+                            print("    Please ensure the file is shared with your service account with 'Editor' permissions.")
                         continue
                     else:
                         print(f"  ⚠️  Error checking presentation access: {check_error}")
@@ -384,20 +380,20 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
                             service_account_email = get_service_account_email()
                             print(f"  ⚠️  Error deleting presentation '{file['name']}': File not found or not accessible.")
                             print(f"    Service account email: {service_account_email}")
-                            print(f"    Please ensure the file is shared with this service account with 'Editor' permissions.")
+                            print("    Please ensure the file is shared with this service account with 'Editor' permissions.")
                         except Exception:
                             print(f"  ⚠️  Error deleting presentation '{file['name']}': File not found or not accessible.")
-                            print(f"    Please ensure the file is shared with your service account with 'Editor' permissions.")
+                            print("    Please ensure the file is shared with your service account with 'Editor' permissions.")
                     elif error.resp.status == 403:
                         try:
                             from .auth import get_service_account_email
                             service_account_email = get_service_account_email()
                             print(f"  ⚠️  Error deleting presentation '{file['name']}': Permission denied.")
                             print(f"    Service account email: {service_account_email}")
-                            print(f"    Please ensure the file is shared with this service account with 'Editor' permissions.")
+                            print("    Please ensure the file is shared with this service account with 'Editor' permissions.")
                         except Exception:
                             print(f"  ⚠️  Error deleting presentation '{file['name']}': Permission denied.")
-                            print(f"    Please ensure the file is shared with your service account with 'Editor' permissions.")
+                            print("    Please ensure the file is shared with your service account with 'Editor' permissions.")
                     else:
                         print(f"  ⚠️  Error deleting existing presentation {file['name']}: {error}")
                     return False
@@ -456,14 +452,13 @@ def find_existing_presentation(entity_name, output_folder_id, creds):
                 if check_error.resp.status == 404:
                     try:
                         from .auth import get_service_account_email
-                        from .auth import get_service_account_email
                         service_account_email = get_service_account_email()
                         print(f"  ⚠️  Presentation '{files[0]['name']}' not accessible to service account.")
                         print(f"    Service account email: {service_account_email}")
-                        print(f"    Please ensure the file is shared with this service account with 'Editor' permissions.")
+                        print("    Please ensure the file is shared with this service account with 'Editor' permissions.")
                     except Exception:
                         print(f"  ⚠️  Presentation '{files[0]['name']}' not accessible to service account.")
-                        print(f"    Please ensure the file is shared with your service account with 'Editor' permissions.")
+                        print("    Please ensure the file is shared with your service account with 'Editor' permissions.")
                 else:
                     print(f"  ⚠️  Error checking presentation access: {check_error}")
                 return None
@@ -502,12 +497,12 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
         target_slides = target_presentation.get('slides', [])
 
         if not template_slides or not target_slides:
-            print(f"  ⚠️  Template or target presentation has no slides.")
+            print("  ⚠️  Template or target presentation has no slides.")
             return False
 
         max_slide = max(slide_numbers)
         if len(template_slides) < max_slide or len(target_slides) < max_slide:
-            print(f"  ⚠️  Template or target has fewer slides than requested.")
+            print("  ⚠️  Template or target has fewer slides than requested.")
             return False
 
         # Tables cannot be safely recreated slide-by-slide because formatting would be lost.
@@ -856,7 +851,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                         column_count = len(table_columns)
 
                         if row_count == 0 or column_count == 0:
-                            print(f"  ⚠️  Warning: Table element missing rows or columns, skipping")
+                            print("  ⚠️  Warning: Table element missing rows or columns, skipping")
                             continue
 
                         new_table_id = str(uuid.uuid4()).replace('-', '')[:26]
@@ -1155,7 +1150,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
 
                             copy_requests.append(create_image_request)
                         else:
-                            print(f"  ⚠️  Warning: Image element found but no URL available, skipping")
+                            print("  ⚠️  Warning: Image element found but no URL available, skipping")
 
                 # Execute copy requests in batches
                 if copy_requests:
@@ -1192,7 +1187,7 @@ def copy_template_presentation(spreadsheet_name, template_id, output_folder_id, 
     drive_service = build('drive', 'v3', credentials=creds)
 
     # Copy the template
-    print(f"Copying template presentation...")
+    print("Copying template presentation...")
     copied_file = drive_service.files().copy(
         fileId=template_id,
         body={'name': f"{spreadsheet_name}.gslides"},
@@ -1203,7 +1198,7 @@ def copy_template_presentation(spreadsheet_name, template_id, output_folder_id, 
     print(f"Created presentation: {spreadsheet_name}.gslides (ID: {new_presentation_id})")
 
     # Move to output folder
-    print(f"Moving presentation to output folder...")
+    print("Moving presentation to output folder...")
     file_metadata = drive_service.files().get(fileId=new_presentation_id, fields='parents', supportsAllDrives=True).execute()
     previous_parents = ",".join(file_metadata.get('parents', []))
 
@@ -1314,7 +1309,7 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
                 if files:
                     # Return the file ID - we'll grant public access in replace_textbox_with_image
                     return files[0]['id']
-            except HttpError as e:
+            except HttpError:
                 # Continue to next extension if this one fails
                 continue
 
@@ -1653,7 +1648,7 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
 
     if not is_url:
         # It's a Drive file ID - temporarily grant public access
-        print(f"  🏞️ Image url is a drive file")
+        print("  🏞️ Image url is a drive file")
         file_id = image_url_or_file_id
 
         try:
@@ -1690,10 +1685,10 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
                     ).execute()
                     permission_id = result.get('id')
                     had_public_permission = True
-                    print(f"    ℹ️  Temporarily granted public access to image file for insertion")
+                    print("    ℹ️  Temporarily granted public access to image file for insertion")
                 except HttpError as perm_error:
                     # If we can't modify permissions, check if file has a shareable link
-                    print(f"    ⚠️  Cannot modify file permissions (app lacks write access). Checking for existing shareable link...")
+                    print("    ⚠️  Cannot modify file permissions (app lacks write access). Checking for existing shareable link...")
                     # Try to get webContentLink - this might work if file is already shared
                     try:
                         file_metadata = drive_service.files().get(
@@ -1706,11 +1701,11 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
                         if web_content_link:
                             # Extract file ID from webContentLink and construct direct download URL
                             image_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-                            print(f"    ℹ️  Using existing shareable link (file may need to be manually shared)")
+                            print("    ℹ️  Using existing shareable link (file may need to be manually shared)")
                         else:
                             # No shareable link available
                             raise ValueError("File is not publicly accessible and app cannot modify permissions. Please manually share the file with 'Anyone with the link' access.")
-                    except Exception as link_error:
+                    except Exception:
                         raise ValueError(f"File is not publicly accessible. Please manually share the image file (ID: {file_id}) with 'Anyone with the link' access, or grant the app write access to modify permissions. Error: {perm_error}")
 
             # Get the public URL for the image
@@ -1738,7 +1733,7 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
                 print(f"    ⚠️  Error setting up image file permissions: {e}")
             # Fallback to basic Drive URL (may not work if file is not public)
             image_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-            print(f"    ⚠️  Attempting to use file URL anyway (may fail if file is not publicly accessible)")
+            print("    ⚠️  Attempting to use file URL anyway (may fail if file is not publicly accessible)")
 
     # Prepare requests to delete textbox and insert image
     create_image_request = {
@@ -1856,7 +1851,7 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
                     permissionId=permission_id,
                     supportsAllDrives=True
                 ).execute()
-                print(f"    ℹ️  Revoked temporary public access from image file")
+                print("    ℹ️  Revoked temporary public access from image file")
             except HttpError as revoke_error:
                 print(f"    ⚠️  Warning: Could not revoke temporary public access: {revoke_error}. \n You should manually revoke the public access from the file.")
                 print(f"      File id: {image_url_or_file_id}")
@@ -2541,7 +2536,7 @@ def process_spreadsheet(spreadsheet_id, spreadsheet_name, template_id, output_fo
             print("Warning: Some placeholders may not have been replaced successfully")
 
         print(f"\n{'='*80}")
-        print(f"✓ Presentation created successfully!")
+        print("✓ Presentation created successfully!")
         print(f"  Presentation ID: {presentation_id}")
         print(f"  View at: https://docs.google.com/presentation/d/{presentation_id}/edit")
         print(f"{'='*80}")

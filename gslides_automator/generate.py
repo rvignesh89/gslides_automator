@@ -8,9 +8,7 @@ Processes each entity sequentially (L1 → L2 → L3) and stops on any error.
 import os
 import sys
 import argparse
-from typing import Optional, Set
 
-from googleapiclient.discovery import build
 
 # Add project root to path to import modules
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -99,7 +97,7 @@ def generate_entity(entity_flags: EntityFlags, creds, layout: DriveLayout) -> No
             raise Exception(f"No spreadsheet found in L1-Merged folder for entity '{entity_name}'")
 
         if len(spreadsheets) > 1:
-            print(f"  ⚠️  Multiple spreadsheets found, using the first one")
+            print("  ⚠️  Multiple spreadsheets found, using the first one")
 
         spreadsheet_id, spreadsheet_name = spreadsheets[0]
 

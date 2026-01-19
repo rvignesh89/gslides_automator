@@ -4,14 +4,12 @@ Tests for l2_generate module.
 
 from __future__ import annotations
 
-import pytest
 from googleapiclient.discovery import build
 
 from gslides_automator.generate import generate
 from tests.test_utils import (
     create_test_l0_data,
     get_slide_text_content,
-    verify_drive_structure,
 )
 
 
@@ -132,7 +130,7 @@ class TestL2EntityFiltering:
         test_templates,
     ):
         """Test entity filtering with generate=Y."""
-        from tests.test_utils import create_test_entities_csv, create_test_l0_data
+        from tests.test_utils import create_test_entities_csv
 
         entities = {
             "entity-1": {"l1": "Y", "l2": "All", "l3": "N"},
@@ -174,7 +172,7 @@ class TestL2SlideFiltering:
         test_templates,
     ):
         """Test slide number filtering (e.g., '1,2-4')."""
-        from tests.test_utils import create_test_entities_csv, create_test_l0_data
+        from tests.test_utils import create_test_entities_csv
 
         entities = {
             "entity-1": {"l1": "Y", "l2": "1", "l3": "N"},  # Only slide 1
@@ -238,7 +236,7 @@ class TestL2ErrorCases:
         test_credentials,
     ):
         """Test error handling when slide template is missing."""
-        from tests.test_utils import create_test_entities_csv, create_test_l0_data
+        from tests.test_utils import create_test_entities_csv
 
         entities = {
             "entity-1": {"l1": "N", "l2": "All", "l3": "N"},  # L2 only, no L1
