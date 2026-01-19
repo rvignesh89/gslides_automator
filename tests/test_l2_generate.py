@@ -10,6 +10,7 @@ from gslides_automator.generate import generate
 from tests.test_utils import (
     create_test_l0_data,
     get_slide_text_content,
+    execute_with_retry,
 )
 
 
@@ -40,7 +41,7 @@ class TestL2GenerateSingleEntity:
             f"and '{layout.l2_slide_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -48,7 +49,6 @@ class TestL2GenerateSingleEntity:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         presentations = results.get("files", [])
@@ -107,7 +107,7 @@ class TestL2PlaceholderReplacement:
             f"and '{layout.l2_slide_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -115,7 +115,6 @@ class TestL2PlaceholderReplacement:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         if results.get("files"):

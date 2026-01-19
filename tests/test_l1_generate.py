@@ -10,6 +10,7 @@ from gslides_automator.generate import generate
 from tests.test_utils import (
     create_test_l0_data,
     get_spreadsheet_data,
+    execute_with_retry,
 )
 
 
@@ -61,7 +62,7 @@ class TestL1GenerateSingleEntity:
             f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -69,7 +70,6 @@ class TestL1GenerateSingleEntity:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         folders = results.get("files", [])
@@ -84,7 +84,7 @@ class TestL1GenerateSingleEntity:
             f"and '{entity_folder_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -92,7 +92,6 @@ class TestL1GenerateSingleEntity:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         spreadsheets = results.get("files", [])
@@ -110,7 +109,7 @@ class TestL1GenerateSingleEntity:
             f"and '{entity_folder_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -118,7 +117,6 @@ class TestL1GenerateSingleEntity:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         images = results.get("files", [])
@@ -209,7 +207,7 @@ class TestL1CSVProcessing:
             f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -217,7 +215,6 @@ class TestL1CSVProcessing:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         spreadsheet_id = results["files"][0]["id"]
@@ -284,7 +281,7 @@ class TestL1ImageCopying:
             f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -292,7 +289,6 @@ class TestL1ImageCopying:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         entity_folder_id = results["files"][0]["id"]
@@ -303,7 +299,7 @@ class TestL1ImageCopying:
             f"and '{entity_folder_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -311,7 +307,6 @@ class TestL1ImageCopying:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         images = results.get("files", [])
@@ -368,7 +363,7 @@ class TestL1EntityFiltering:
             f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -376,7 +371,6 @@ class TestL1EntityFiltering:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         assert len(results.get("files", [])) == 0
@@ -412,11 +406,13 @@ class TestL1ErrorCases:
             "mimeType": "application/vnd.google-apps.folder",
             "parents": [test_drive_layout.l0_raw_id],
         }
-        drive_service.files().create(
-            body=file_metadata,
-            fields="id",
-            supportsAllDrives=True,
-        ).execute()
+        execute_with_retry(
+            drive_service.files().create(
+                body=file_metadata,
+                fields="id",
+                supportsAllDrives=True,
+            )
+        )
 
         # Run L1 generate - should succeed but with warning
         result = generate(creds=test_credentials, layout=test_drive_layout)

@@ -6,14 +6,103 @@ from __future__ import annotations
 
 import csv
 import io
+import time
 import uuid
 from typing import Dict, List, Optional
 
 import gspread
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
 
 from gslides_automator.drive_layout import DriveLayout
+
+
+def retry_with_exponential_backoff(
+    func, max_retries=5, initial_delay=1, max_delay=60, backoff_factor=2
+):
+    """
+    Retry a function with exponential backoff on 429 (Too Many Requests) and 5xx (Server) errors.
+
+    Args:
+        func: Function to retry (should be a callable that takes no arguments)
+        max_retries: Maximum number of retry attempts (default: 5)
+        initial_delay: Initial delay in seconds before first retry (default: 1)
+        max_delay: Maximum delay in seconds between retries (default: 60)
+        backoff_factor: Factor to multiply delay by after each retry (default: 2)
+
+    Returns:
+        The return value of func() if successful
+
+    Raises:
+        HttpError: If the error is not retryable or if max_retries is exceeded
+        Exception: Any other exception raised by func()
+    """
+    delay = initial_delay
+
+    for attempt in range(max_retries + 1):
+        try:
+            return func()
+        except HttpError as error:
+            status = error.resp.status
+            # Check if it's a retryable error (429 Too Many Requests or 5xx Server Errors)
+            is_retryable = (status == 429) or (500 <= status < 600)
+
+            if is_retryable:
+                if attempt < max_retries:
+                    # Calculate wait time with exponential backoff
+                    wait_time = min(delay, max_delay)
+                    if status == 429:
+                        error_msg = "Rate limit exceeded (429)"
+                    else:
+                        error_msg = f"Server error ({status})"
+                    print(
+                        f"    ⚠️  {error_msg}. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})"
+                    )
+                    time.sleep(wait_time)
+                    delay *= backoff_factor
+                else:
+                    if status == 429:
+                        error_msg = "Rate limit exceeded (429)"
+                    else:
+                        error_msg = f"Server error ({status})"
+                    print(f"    ✗ {error_msg}. Max retries ({max_retries}) reached.")
+                    raise
+            else:
+                # For non-retryable errors, re-raise immediately
+                raise
+        except Exception as e:
+            # For non-HttpError exceptions, check if it's a rate limit error
+            error_str = str(e).lower()
+            if "429" in error_str or "rate limit" in error_str or "quota" in error_str:
+                if attempt < max_retries:
+                    wait_time = min(delay, max_delay)
+                    print(
+                        f"    ⚠️  Rate limit error. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})"
+                    )
+                    time.sleep(wait_time)
+                    delay *= backoff_factor
+                else:
+                    print(
+                        f"    ✗ Rate limit error. Max retries ({max_retries}) reached."
+                    )
+                    raise
+            else:
+                # For non-retryable errors, re-raise immediately
+                raise
+
+
+def execute_with_retry(request):
+    """
+    Execute a Google API request with rate limit retry.
+
+    Args:
+        request: A Google API request object (e.g., from drive_service.files().get())
+
+    Returns:
+        The result of request.execute()
+    """
+    return retry_with_exponential_backoff(lambda: request.execute())
 
 
 def create_test_drive_structure(root_id: str, creds) -> DriveLayout:
@@ -45,14 +134,13 @@ def create_test_drive_structure(root_id: str, creds) -> DriveLayout:
             "mimeType": "application/vnd.google-apps.folder",
             "parents": [root_id],
         }
-        folder = (
+        folder = execute_with_retry(
             drive_service.files()
             .create(
                 body=file_metadata,
                 fields="id",
                 supportsAllDrives=True,
             )
-            .execute()
         )
         folders[key] = folder.get("id")
 
@@ -114,7 +202,7 @@ def create_test_entities_csv(
         resumable=False,
     )
 
-    file = (
+    file = execute_with_retry(
         drive_service.files()
         .create(
             body=file_metadata,
@@ -122,7 +210,6 @@ def create_test_entities_csv(
             fields="id",
             supportsAllDrives=True,
         )
-        .execute()
     )
 
     return file.get("id")
@@ -149,14 +236,13 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
         "parents": [templates_folder_id],
     }
 
-    spreadsheet_file = (
+    spreadsheet_file = execute_with_retry(
         drive_service.files()
         .create(
             body=file_metadata,
             fields="id",
             supportsAllDrives=True,
         )
-        .execute()
     )
 
     spreadsheet_id = spreadsheet_file.get("id")
@@ -268,14 +354,13 @@ def create_test_slide_template(templates_folder_id: str, creds) -> str:
     }
 
     # Create empty presentation file in the folder
-    presentation_file = (
+    presentation_file = execute_with_retry(
         drive_service.files()
         .create(
             body=file_metadata,
             fields="id",
             supportsAllDrives=True,
         )
-        .execute()
     )
 
     presentation_id = presentation_file.get("id")
@@ -421,14 +506,13 @@ def create_test_l0_data(
         "parents": [l0_root_id],
     }
 
-    folder = (
+    folder = execute_with_retry(
         drive_service.files()
         .create(
             body=file_metadata,
             fields="id",
             supportsAllDrives=True,
         )
-        .execute()
     )
 
     entity_folder_id = folder.get("id")
@@ -473,12 +557,14 @@ def create_test_l0_data(
             resumable=False,
         )
 
-        drive_service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields="id",
-            supportsAllDrives=True,
-        ).execute()
+        execute_with_retry(
+            drive_service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields="id",
+                supportsAllDrives=True,
+            )
+        )
 
     # Create a simple test image (1x1 pixel PNG)
     # Note: In real tests, you might want to use actual image files
@@ -501,12 +587,14 @@ def create_test_l0_data(
         resumable=False,
     )
 
-    drive_service.files().create(
-        body=file_metadata,
-        media_body=media,
-        fields="id",
-        supportsAllDrives=True,
-    ).execute()
+    execute_with_retry(
+        drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields="id",
+            supportsAllDrives=True,
+        )
+    )
 
     return entity_folder_id
 
@@ -523,7 +611,7 @@ def cleanup_test_drive(root_id: str, creds) -> None:
 
     try:
         # List all files in the root folder
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=f"'{root_id}' in parents and trashed=false",
@@ -531,7 +619,6 @@ def cleanup_test_drive(root_id: str, creds) -> None:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         files = results.get("files", [])
@@ -543,10 +630,12 @@ def cleanup_test_drive(root_id: str, creds) -> None:
                     # Recursively delete folder contents first
                     cleanup_test_drive(file["id"], creds)
 
-                drive_service.files().delete(
-                    fileId=file["id"],
-                    supportsAllDrives=True,
-                ).execute()
+                execute_with_retry(
+                    drive_service.files().delete(
+                        fileId=file["id"],
+                        supportsAllDrives=True,
+                    )
+                )
             except Exception as e:
                 print(f"Warning: Failed to delete {file.get('name', 'unknown')}: {e}")
     except Exception as e:
@@ -576,14 +665,13 @@ def verify_drive_structure(layout: DriveLayout, creds) -> bool:
 
     for folder_name, folder_id in required_folders.items():
         try:
-            folder = (
+            folder = execute_with_retry(
                 drive_service.files()
                 .get(
                     fileId=folder_id,
                     fields="id, name, mimeType",
                     supportsAllDrives=True,
                 )
-                .execute()
             )
 
             if folder.get("mimeType") != "application/vnd.google-apps.folder":

@@ -4,9 +4,11 @@ from dataclasses import dataclass
 import csv
 import io
 import re
+import time
 from typing import Dict, Iterable, List, Optional, Sequence, Set
 
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload
 
 
@@ -59,6 +61,93 @@ def _extract_id_from_url(shared_drive_url: str) -> str:
     )
 
 
+def retry_with_exponential_backoff(
+    func, max_retries=5, initial_delay=1, max_delay=60, backoff_factor=2
+):
+    """
+    Retry a function with exponential backoff on 429 (Too Many Requests) and 5xx (Server) errors.
+
+    Args:
+        func: Function to retry (should be a callable that takes no arguments)
+        max_retries: Maximum number of retry attempts (default: 5)
+        initial_delay: Initial delay in seconds before first retry (default: 1)
+        max_delay: Maximum delay in seconds between retries (default: 60)
+        backoff_factor: Factor to multiply delay by after each retry (default: 2)
+
+    Returns:
+        The return value of func() if successful
+
+    Raises:
+        HttpError: If the error is not retryable or if max_retries is exceeded
+        Exception: Any other exception raised by func()
+    """
+    delay = initial_delay
+
+    for attempt in range(max_retries + 1):
+        try:
+            return func()
+        except HttpError as error:
+            status = error.resp.status
+            # Check if it's a retryable error (429 Too Many Requests or 5xx Server Errors)
+            is_retryable = (status == 429) or (500 <= status < 600)
+
+            if is_retryable:
+                if attempt < max_retries:
+                    # Calculate wait time with exponential backoff
+                    wait_time = min(delay, max_delay)
+                    if status == 429:
+                        error_msg = "Rate limit exceeded (429)"
+                    else:
+                        error_msg = f"Server error ({status})"
+                    print(
+                        f"    ⚠️  {error_msg}. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})"
+                    )
+                    time.sleep(wait_time)
+                    delay *= backoff_factor
+                else:
+                    if status == 429:
+                        error_msg = "Rate limit exceeded (429)"
+                    else:
+                        error_msg = f"Server error ({status})"
+                    print(f"    ✗ {error_msg}. Max retries ({max_retries}) reached.")
+                    raise
+            else:
+                # For non-retryable errors, re-raise immediately
+                raise
+        except Exception as e:
+            # For non-HttpError exceptions, check if it's a rate limit error
+            error_str = str(e).lower()
+            if "429" in error_str or "rate limit" in error_str or "quota" in error_str:
+                if attempt < max_retries:
+                    wait_time = min(delay, max_delay)
+                    print(
+                        f"    ⚠️  Rate limit error. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})"
+                    )
+                    time.sleep(wait_time)
+                    delay *= backoff_factor
+                else:
+                    print(
+                        f"    ✗ Rate limit error. Max retries ({max_retries}) reached."
+                    )
+                    raise
+            else:
+                # For non-retryable errors, re-raise immediately
+                raise
+
+
+def execute_with_retry(request):
+    """
+    Execute a Google API request with rate limit retry.
+
+    Args:
+        request: A Google API request object (e.g., from drive_service.files().get())
+
+    Returns:
+        The result of request.execute()
+    """
+    return retry_with_exponential_backoff(lambda: request.execute())
+
+
 def _find_child_by_name(
     drive_service,
     parent_id: str,
@@ -75,7 +164,7 @@ def _find_child_by_name(
         query = (
             f"'{parent_id}' in parents and name='{name}' and trashed=false{mime_clause}"
         )
-        result = (
+        result = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -84,7 +173,6 @@ def _find_child_by_name(
                 includeItemsFromAllDrives=True,
                 pageSize=5,
             )
-            .execute()
         )
         files = result.get("files", [])
         if files:
@@ -117,14 +205,13 @@ def _find_or_create_folder(
             "mimeType": "application/vnd.google-apps.folder",
             "parents": [parent_id],
         }
-        folder = (
+        folder = execute_with_retry(
             drive_service.files()
             .create(
                 body=file_metadata,
                 fields="id",
                 supportsAllDrives=True,
             )
-            .execute()
         )
         return folder.get("id")
 
@@ -198,13 +285,17 @@ def load_entities(entities_csv_id: str, creds) -> List[str]:
     request = drive_service.files().get_media(
         fileId=entities_csv_id, supportsAllDrives=True
     )
-    buffer = io.BytesIO()
-    downloader = MediaIoBaseDownload(buffer, request)
-    done = False
-    while not done:
-        status, done = downloader.next_chunk()
-    buffer.seek(0)
-    content = buffer.read().decode("utf-8")
+    
+    def _download():
+        buffer = io.BytesIO()
+        downloader = MediaIoBaseDownload(buffer, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        buffer.seek(0)
+        return buffer.read().decode("utf-8")
+    
+    content = retry_with_exponential_backoff(_download)
 
     reader = csv.reader(io.StringIO(content))
     entities: List[str] = []
@@ -297,13 +388,17 @@ def load_entities_with_slides(
     request = drive_service.files().get_media(
         fileId=entities_csv_id, supportsAllDrives=True
     )
-    buffer = io.BytesIO()
-    downloader = MediaIoBaseDownload(buffer, request)
-    done = False
-    while not done:
-        status, done = downloader.next_chunk()
-    buffer.seek(0)
-    content = buffer.read().decode("utf-8")
+    
+    def _download():
+        buffer = io.BytesIO()
+        downloader = MediaIoBaseDownload(buffer, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        buffer.seek(0)
+        return buffer.read().decode("utf-8")
+    
+    content = retry_with_exponential_backoff(_download)
 
     reader = csv.reader(io.StringIO(content))
     entities: Dict[str, Optional[Set[int]]] = {}
@@ -366,13 +461,17 @@ def load_entities_with_flags(entities_csv_id: str, creds) -> List[EntityFlags]:
     request = drive_service.files().get_media(
         fileId=entities_csv_id, supportsAllDrives=True
     )
-    buffer = io.BytesIO()
-    downloader = MediaIoBaseDownload(buffer, request)
-    done = False
-    while not done:
-        status, done = downloader.next_chunk()
-    buffer.seek(0)
-    content = buffer.read().decode("utf-8")
+    
+    def _download():
+        buffer = io.BytesIO()
+        downloader = MediaIoBaseDownload(buffer, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        buffer.seek(0)
+        return buffer.read().decode("utf-8")
+    
+    content = retry_with_exponential_backoff(_download)
 
     reader = csv.reader(io.StringIO(content))
     entities: List[EntityFlags] = []

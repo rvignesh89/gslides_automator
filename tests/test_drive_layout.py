@@ -18,6 +18,7 @@ from tests.test_utils import (
     create_test_entities_csv,
     create_test_data_template,
     create_test_slide_template,
+    execute_with_retry,
 )
 
 
@@ -78,14 +79,13 @@ class TestResolveLayout:
             "name": "test-empty-folder",
             "mimeType": "application/vnd.google-apps.folder",
         }
-        folder = (
+        folder = execute_with_retry(
             drive_service.files()
             .create(
                 body=file_metadata,
                 fields="id",
                 supportsAllDrives=True,
             )
-            .execute()
         )
 
         root_id = folder.get("id")
@@ -95,10 +95,12 @@ class TestResolveLayout:
                 resolve_layout(root_id, test_credentials)
         finally:
             # Cleanup
-            drive_service.files().delete(
-                fileId=root_id,
-                supportsAllDrives=True,
-            ).execute()
+            execute_with_retry(
+                drive_service.files().delete(
+                    fileId=root_id,
+                    supportsAllDrives=True,
+                )
+            )
 
     def test_resolve_layout_invalid_root(self, test_credentials):
         """Test that invalid root ID raises error."""

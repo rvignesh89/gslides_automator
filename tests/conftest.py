@@ -17,6 +17,7 @@ from tests.test_utils import (
     create_test_data_template,
     create_test_slide_template,
     create_test_l0_data,
+    execute_with_retry,
 )
 
 
@@ -75,14 +76,13 @@ def test_drive_root(test_credentials):
 
     # Verify parent folder exists and is accessible
     try:
-        parent_folder = (
+        parent_folder = execute_with_retry(
             drive_service.files()
             .get(
                 fileId=parent_id,
                 fields="id, name, mimeType",
                 supportsAllDrives=True,
             )
-            .execute()
         )
 
         if parent_folder.get("mimeType") != "application/vnd.google-apps.folder":
@@ -98,14 +98,13 @@ def test_drive_root(test_credentials):
         "parents": [parent_id],
     }
 
-    folder = (
+    folder = execute_with_retry(
         drive_service.files()
         .create(
             body=file_metadata,
             fields="id",
             supportsAllDrives=True,
         )
-        .execute()
     )
 
     root_id = folder.get("id")
@@ -114,10 +113,12 @@ def test_drive_root(test_credentials):
 
     # Cleanup: Delete the test folder
     try:
-        drive_service.files().delete(
-            fileId=root_id,
-            supportsAllDrives=True,
-        ).execute()
+        execute_with_retry(
+            drive_service.files().delete(
+                fileId=root_id,
+                supportsAllDrives=True,
+            )
+        )
     except Exception as e:
         # Log but don't fail test if cleanup fails
         print(f"Warning: Failed to cleanup test drive folder {root_id}: {e}")

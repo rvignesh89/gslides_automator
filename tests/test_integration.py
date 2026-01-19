@@ -10,6 +10,7 @@ from gslides_automator.generate import generate
 from tests.test_utils import (
     get_spreadsheet_data,
     get_slide_text_content,
+    execute_with_retry,
 )
 
 
@@ -58,7 +59,7 @@ class TestFullWorkflow:
             f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -66,7 +67,6 @@ class TestFullWorkflow:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         assert len(results.get("files", [])) == 1
@@ -79,7 +79,7 @@ class TestFullWorkflow:
             f"and '{entity_folder_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -87,7 +87,6 @@ class TestFullWorkflow:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         assert len(results.get("files", [])) == 1
@@ -105,7 +104,7 @@ class TestFullWorkflow:
             f"and '{test_drive_layout.l2_slide_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -113,7 +112,6 @@ class TestFullWorkflow:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         assert len(results.get("files", [])) == 1
@@ -133,7 +131,7 @@ class TestFullWorkflow:
             f"and '{test_drive_layout.l3_pdf_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -141,7 +139,6 @@ class TestFullWorkflow:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         assert len(results.get("files", [])) == 1
@@ -307,7 +304,7 @@ class TestWorkflowDataIntegrity:
             f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -315,7 +312,6 @@ class TestWorkflowDataIntegrity:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         assert len(results.get("files", [])) == 1
@@ -328,7 +324,7 @@ class TestWorkflowDataIntegrity:
             f"and '{entity_folder_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -336,7 +332,6 @@ class TestWorkflowDataIntegrity:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         assert len(results.get("files", [])) == 1
@@ -359,7 +354,7 @@ class TestWorkflowDataIntegrity:
             f"and '{test_drive_layout.l3_pdf_id}' in parents "
             f"and trashed=false"
         )
-        results = (
+        results = execute_with_retry(
             drive_service.files()
             .list(
                 q=query,
@@ -367,7 +362,6 @@ class TestWorkflowDataIntegrity:
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
         )
 
         assert len(results.get("files", [])) == 1
