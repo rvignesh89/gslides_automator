@@ -11,7 +11,9 @@ def _run_generate(args: argparse.Namespace) -> int:
     """Entrypoint for the `generate` subcommand."""
     from .generate import generate, get_oauth_credentials, resolve_layout
 
-    creds = get_oauth_credentials(service_account_credentials=args.service_account_credentials)
+    creds = get_oauth_credentials(
+        service_account_credentials=args.service_account_credentials
+    )
     layout = resolve_layout(args.shared_drive_url, creds)
     generate(
         creds=creds,

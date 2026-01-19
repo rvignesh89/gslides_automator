@@ -32,8 +32,28 @@ Homepage = "https://github.com/rvignesh89/gslides_automator"
 gslides_automator = "gslides_automator.cli:main"
 
 [project.optional-dependencies]
-dev = []
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.0.0",
+]
 
 [tool.setuptools]
 packages = ["gslides_automator"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "e2e: End-to-end tests",
+]
 

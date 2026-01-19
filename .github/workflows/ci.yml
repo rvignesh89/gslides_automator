@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    name: Lint Python Code
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install ruff
+      run: pip install ruff
+
+    - name: Run ruff check
+      run: ruff check .
+
+    - name: Run ruff format check
+      run: ruff format --check .
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        pip install -e ".[dev]"
+
+    - name: Run pytest
+      run: pytest tests/ -v
+      env:
+        # These will need to be set as GitHub secrets for integration tests
+        # For now, tests that don't require these will still run
+        TEST_DRIVE_FOLDER_ID: ${{ secrets.TEST_DRIVE_FOLDER_ID }}
+        TEST_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.TEST_SERVICE_ACCOUNT_CREDENTIALS }}

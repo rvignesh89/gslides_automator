@@ -6,4 +6,4 @@ from __future__ import annotations
 
 from gslides_automator.generate import generate
 
-__all__ = ['generate']
+__all__ = ["generate"]
