@@ -21,20 +21,26 @@ from tests.test_utils import (
 
 
 @pytest.fixture(scope="session")
-def test_credentials():
+def test_credentials(tmp_path_factory):
     """
     Provides test service account credentials.
 
-    Uses TEST_SERVICE_ACCOUNT_CREDENTIALS environment variable if set,
+    Uses TEST_SERVICE_ACCOUNT_CREDENTIALS environment variable (containing
+    the credentials JSON itself) if set, writes it to a temp file,
     otherwise falls back to service-account-credentials.json in project root.
     """
-    creds_path = os.getenv(
-        "TEST_SERVICE_ACCOUNT_CREDENTIALS",
-        os.path.join(
+    credentials_json = os.getenv("TEST_SERVICE_ACCOUNT_CREDENTIALS")
+    if credentials_json:
+        # Write JSON credentials content to a temporary file
+        temp_dir = tmp_path_factory.mktemp("gslides_test_credentials")
+        temp_json_path = temp_dir / "service-account-credentials.json"
+        temp_json_path.write_text(credentials_json)
+        creds_path = str(temp_json_path)
+    else:
+        creds_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
             "service-account-credentials.json",
-        ),
-    )
+        )
 
     if not os.path.exists(creds_path):
         pytest.skip(
