@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import sys
 import argparse
+import time
 from gslides_automator.drive_layout import (
     DriveLayout,
     EntityFlags,
@@ -55,6 +56,9 @@ def generate_entity(entity_flags: EntityFlags, creds, layout: DriveLayout) -> No
         print(f"No processing to do for entity: {entity_name}")
         return
 
+    # Track entity processing time
+    entity_start_time = time.time()
+
     # Only print info if there's processing to do
     print(f"\nData levels to generate for {entity_name}:")
     print(f"  L1: {'Yes' if entity_flags.l1 else 'No'}")
@@ -72,13 +76,17 @@ def generate_entity(entity_flags: EntityFlags, creds, layout: DriveLayout) -> No
     # Step 1: L1 Generation
     if entity_flags.l1:
         print(f"\n[L1] Generating L1-Merged for {entity_name}...\n")
+        l1_start_time = time.time()
         if not l1_process_entity(entity_name, creds, layout):
             raise Exception(f"L1 generation failed for entity '{entity_name}'")
-        print(f"[L1] ✓ Successfully generated L1-Merged for {entity_name}\n")
+        l1_elapsed = time.time() - l1_start_time
+        print(f"[L1] ✓ Successfully generated L1-Merged for {entity_name}")
+        print(f"[L1] Time taken: {l1_elapsed:.2f} seconds")
 
     # Step 2: L2 Generation
     if entity_flags.l2 is not None:  # L2 is set (either all slides or specific slides)
-        print(f"[L2] Generating L2-Slides for {entity_name}...")
+        print(f"\n[L2] Generating L2-Slides for {entity_name}...")
+        l2_start_time = time.time()
 
         # Find the entity folder in L1-Merged
         entity_folders = list_entity_folders(layout.l1_merged_id, creds)
@@ -120,11 +128,14 @@ def generate_entity(entity_flags: EntityFlags, creds, layout: DriveLayout) -> No
         if not presentation_id:
             raise Exception(f"L2 generation failed for entity '{entity_name}'")
 
-        print(f"[L2] ✓ Successfully generated L2-Slides for {entity_name}\n")
+        l2_elapsed = time.time() - l2_start_time
+        print(f"[L2] ✓ Successfully generated L2-Slides for {entity_name}")
+        print(f"[L2] Time taken: {l2_elapsed:.2f} seconds")
 
     # Step 3: L3 PDF Export
     if entity_flags.l3:
-        print(f"[L3] Generating L3-PDF for {entity_name}...")
+        print(f"\n[L3] Generating L3-PDF for {entity_name}...")
+        l3_start_time = time.time()
 
         # Find the presentation if not already known
         if not presentation_id:
@@ -143,10 +154,14 @@ def generate_entity(entity_flags: EntityFlags, creds, layout: DriveLayout) -> No
         ):
             raise Exception(f"L3 PDF export failed for entity '{entity_name}'")
 
-        print(f"[L3] ✓ Successfully generated L3-PDF for {entity_name}\n")
+        l3_elapsed = time.time() - l3_start_time
+        print(f"[L3] ✓ Successfully generated L3-PDF for {entity_name}")
+        print(f"[L3] Time taken: {l3_elapsed:.2f} seconds\n")
 
-    # Only print success message if there was processing
-    print(f"✓ Successfully completed all steps for entity: {entity_name}\n")
+    # Report entity processing time
+    entity_elapsed = time.time() - entity_start_time
+    print(f"✓ Successfully completed all steps for entity: {entity_name}")
+    print(f"Entity processing time: {entity_elapsed:.2f} seconds\n")
 
 
 def generate(creds=None, layout: DriveLayout = None):
@@ -165,6 +180,14 @@ def generate(creds=None, layout: DriveLayout = None):
         ValueError: If layout is not provided
         Exception: If any entity processing fails (stops immediately)
     """
+    # Print banner
+    banner_width = 80
+    print("#" * banner_width)
+    print("#" + " " * (banner_width - 2) + "#")
+    print("#  Google Slides Automator 📠" + " " * (banner_width - 30) + "#")
+    print("#" + " " * (banner_width - 2) + "#")
+    print("#" * banner_width + "\n")
+
     if layout is None:
         raise ValueError("layout (DriveLayout) is required. Pass it as a parameter.")
 
@@ -175,14 +198,17 @@ def generate(creds=None, layout: DriveLayout = None):
     if not layout.entities_csv_id:
         raise ValueError("No entities CSV ID found in layout.")
 
-    print("Loading entities from entities.csv...", end=" ")
+    print("Loading entities from entities.csv...")
     entities = load_entities_with_flags(layout.entities_csv_id, creds)
 
     if not entities:
         print("⚠️  No entities found\n")
         return {"successful": [], "failed": []}
 
-    print(f"✓ Loaded {len(entities)} entities\n")
+    print(f"  ✓ Loaded {len(entities)} entities")
+
+    # Track total generation time
+    generate_start_time = time.time()
 
     # Process each entity sequentially
     successful = []
@@ -236,6 +262,9 @@ def generate(creds=None, layout: DriveLayout = None):
             print(f"  ✗ {entity}")
         print()
 
+    # Report total generation time
+    generate_elapsed = time.time() - generate_start_time
+    print(f"Total generation time: {generate_elapsed:.2f} seconds")
     print("=" * 80)
 
     return {"successful": successful, "failed": failed}

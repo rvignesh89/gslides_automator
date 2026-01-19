@@ -2850,11 +2850,13 @@ def process_all_slides(
             )  # 1-based slide number (used only for messaging)
 
             if slides and slide_number not in slides:
-                print(f"\nSkipping slide {slide_number} (not requested)")
+                print(f"Skipping slide {slide_number} (not requested)")
                 continue
 
             slide_id = slide.get("objectId")
 
+            # Track slide processing time (only if slide is being processed)
+            slide_start_time = time.time()
             print(f"Processing slide {slide_number}:")
 
             # Loop through all elements in the slide
@@ -3029,6 +3031,10 @@ def process_all_slides(
                             print(
                                 f"  ⚠️  Failed to replace placeholders in slide {slide_number}"
                             )
+
+            # Report slide processing time
+            slide_elapsed = time.time() - slide_start_time
+            print(f"Slide {slide_number} processing time: {slide_elapsed:.2f} seconds")
 
         return True
 
