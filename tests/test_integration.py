@@ -15,29 +15,66 @@ from tests.test_utils import (
 )
 
 
-class TestFullWorkflowL0ToL2:
+class TestFullWorkflow:
     """Tests for complete workflow from L0 to L2."""
 
-    def test_full_workflow_l0_to_l2_single_entity(
+    def test_full_workflow(
         self,
-        complete_test_setup,
+        test_drive_layout,
         test_credentials,
+        test_templates,
     ):
-        """Complete workflow from L0 to L2 for single entity."""
-        setup = complete_test_setup
-        layout = setup["layout"]
+        """Complete workflow from L0 to L3 for single entity."""
+        from tests.test_utils import create_test_entities_csv, create_test_l0_data
 
-        # Run generate (L1 and L2)
-        result = generate(creds=test_credentials, layout=layout)
+        # Create entities CSV with L3 enabled
+        entities = {
+            "entity-1": {"l1": "Y", "l2": "All", "l3": "Y"},
+        }
+
+        csv_file_id = create_test_entities_csv(
+            test_drive_layout.root_id,
+            entities,
+            test_credentials,
+        )
+        test_drive_layout.entities_csv_id = csv_file_id
+
+        create_test_l0_data(
+            test_drive_layout.l0_raw_id,
+            "entity-1",
+            test_credentials,
+        )
+
+        # Run generate (L1, L2, and L3)
+        result = generate(creds=test_credentials, layout=test_drive_layout)
         assert "entity-1" in result["successful"]
         assert len(result["failed"]) == 0
 
         # Verify L1 data was created
         drive_service = build("drive", "v3", credentials=test_credentials)
+
+        # First find the entity folder
+        query = (
+            f"mimeType='application/vnd.google-apps.folder' "
+            f"and name='entity-1' "
+            f"and '{test_drive_layout.l1_merged_id}' in parents "
+            f"and trashed=false"
+        )
+        results = drive_service.files().list(
+            q=query,
+            fields="files(id)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        ).execute()
+
+        assert len(results.get("files", [])) == 1
+        entity_folder_id = results["files"][0]["id"]
+
+        # Then find the spreadsheet inside the entity folder
         query = (
             f"mimeType='application/vnd.google-apps.spreadsheet' "
             f"and name='entity-1' "
-            f"and '{layout.l1_merged_id}' in parents "
+            f"and '{entity_folder_id}' in parents "
             f"and trashed=false"
         )
         results = drive_service.files().list(
@@ -59,7 +96,7 @@ class TestFullWorkflowL0ToL2:
         query = (
             f"mimeType='application/vnd.google-apps.presentation' "
             f"and name='entity-1.gslides' "
-            f"and '{layout.l2_slide_id}' in parents "
+            f"and '{test_drive_layout.l2_slide_id}' in parents "
             f"and trashed=false"
         )
         results = drive_service.files().list(
@@ -78,6 +115,24 @@ class TestFullWorkflowL0ToL2:
 
         # Verify placeholders were replaced
         assert "{{" not in text_content or "}}" not in text_content
+
+        # Verify L3 PDF was created
+        query = (
+            f"mimeType='application/pdf' "
+            f"and name='entity-1.pdf' "
+            f"and '{test_drive_layout.l3_pdf_id}' in parents "
+            f"and trashed=false"
+        )
+        results = drive_service.files().list(
+            q=query,
+            fields="files(id)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        ).execute()
+
+        assert len(results.get("files", [])) == 1
+        pdf_id = results["files"][0]["id"]
+        assert pdf_id is not None
 
     def test_full_workflow_multiple_entities(
         self,
@@ -195,23 +250,43 @@ class TestWorkflowDataIntegrity:
 
     def test_data_preservation_through_workflow(
         self,
-        complete_test_setup,
+        test_drive_layout,
         test_credentials,
+        test_templates,
     ):
-        """Test that data is preserved correctly through L0→L1→L2."""
-        setup = complete_test_setup
-        layout = setup["layout"]
+        """Test that data is preserved correctly through L0→L1→L2→L3."""
+        from tests.test_utils import create_test_entities_csv, create_test_l0_data
 
-        # Run generate (L1 and L2)
-        result = generate(creds=test_credentials, layout=layout)
+        # Create entities CSV with L3 enabled
+        entities = {
+            "entity-1": {"l1": "Y", "l2": "All", "l3": "Y"},
+        }
+
+        csv_file_id = create_test_entities_csv(
+            test_drive_layout.root_id,
+            entities,
+            test_credentials,
+        )
+        test_drive_layout.entities_csv_id = csv_file_id
+
+        create_test_l0_data(
+            test_drive_layout.l0_raw_id,
+            "entity-1",
+            test_credentials,
+        )
+
+        # Run generate (L1, L2, and L3)
+        result = generate(creds=test_credentials, layout=test_drive_layout)
         assert "entity-1" in result["successful"]
 
         # Get L1 spreadsheet data
         drive_service = build("drive", "v3", credentials=test_credentials)
+
+        # First find the entity folder
         query = (
-            f"mimeType='application/vnd.google-apps.spreadsheet' "
+            f"mimeType='application/vnd.google-apps.folder' "
             f"and name='entity-1' "
-            f"and '{layout.l1_merged_id}' in parents "
+            f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
         results = drive_service.files().list(
@@ -221,6 +296,24 @@ class TestWorkflowDataIntegrity:
             includeItemsFromAllDrives=True,
         ).execute()
 
+        assert len(results.get("files", [])) == 1
+        entity_folder_id = results["files"][0]["id"]
+
+        # Then find the spreadsheet inside the entity folder
+        query = (
+            f"mimeType='application/vnd.google-apps.spreadsheet' "
+            f"and name='entity-1' "
+            f"and '{entity_folder_id}' in parents "
+            f"and trashed=false"
+        )
+        results = drive_service.files().list(
+            q=query,
+            fields="files(id)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        ).execute()
+
+        assert len(results.get("files", [])) == 1
         spreadsheet_id = results["files"][0]["id"]
 
         # Get data from spreadsheet
@@ -232,4 +325,22 @@ class TestWorkflowDataIntegrity:
         # Verify data is still intact
         data_after = get_spreadsheet_data(spreadsheet_id, "data", test_credentials)
         assert data_before == data_after
+
+        # Verify L3 PDF was created
+        query = (
+            f"mimeType='application/pdf' "
+            f"and name='entity-1.pdf' "
+            f"and '{test_drive_layout.l3_pdf_id}' in parents "
+            f"and trashed=false"
+        )
+        results = drive_service.files().list(
+            q=query,
+            fields="files(id)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        ).execute()
+
+        assert len(results.get("files", [])) == 1
+        pdf_id = results["files"][0]["id"]
+        assert pdf_id is not None
 
