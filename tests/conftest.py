@@ -30,11 +30,16 @@ def test_credentials():
     """
     creds_path = os.getenv(
         "TEST_SERVICE_ACCOUNT_CREDENTIALS",
-        os.path.join(os.path.dirname(os.path.dirname(__file__)), "service-account-credentials.json")
+        os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "service-account-credentials.json",
+        ),
     )
 
     if not os.path.exists(creds_path):
-        pytest.skip(f"Test credentials file not found: {creds_path}. Set TEST_SERVICE_ACCOUNT_CREDENTIALS environment variable.")
+        pytest.skip(
+            f"Test credentials file not found: {creds_path}. Set TEST_SERVICE_ACCOUNT_CREDENTIALS environment variable."
+        )
 
     return get_oauth_credentials(service_account_credentials=creds_path)
 
@@ -64,11 +69,15 @@ def test_drive_root(test_credentials):
 
     # Verify parent folder exists and is accessible
     try:
-        parent_folder = drive_service.files().get(
-            fileId=parent_id,
-            fields="id, name, mimeType",
-            supportsAllDrives=True,
-        ).execute()
+        parent_folder = (
+            drive_service.files()
+            .get(
+                fileId=parent_id,
+                fields="id, name, mimeType",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
 
         if parent_folder.get("mimeType") != "application/vnd.google-apps.folder":
             pytest.skip(f"TEST_DRIVE_FOLDER_ID ({parent_id}) is not a folder")
@@ -83,11 +92,15 @@ def test_drive_root(test_credentials):
         "parents": [parent_id],
     }
 
-    folder = drive_service.files().create(
-        body=file_metadata,
-        fields="id",
-        supportsAllDrives=True,
-    ).execute()
+    folder = (
+        drive_service.files()
+        .create(
+            body=file_metadata,
+            fields="id",
+            supportsAllDrives=True,
+        )
+        .execute()
+    )
 
     root_id = folder.get("id")
 
@@ -191,7 +204,9 @@ def test_l0_data(test_drive_layout, test_credentials):
 
 
 @pytest.fixture(scope="function")
-def complete_test_setup(test_drive_layout, test_entities_data, test_templates, test_l0_data):
+def complete_test_setup(
+    test_drive_layout, test_entities_data, test_templates, test_l0_data
+):
     """
     Complete test setup with all components.
 
@@ -210,4 +225,3 @@ def complete_test_setup(test_drive_layout, test_entities_data, test_templates, t
         "templates": (data_template_id, slide_template_id),
         "l0_data": test_l0_data,
     }
-

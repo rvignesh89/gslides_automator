@@ -23,7 +23,10 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
 
-def export_slide_to_pdf(slide_id: str, entity_name: str, l3_folder_id: str, creds) -> bool:
+
+def export_slide_to_pdf(
+    slide_id: str, entity_name: str, l3_folder_id: str, creds
+) -> bool:
     """
     Export a Google Slides presentation to PDF and save it to L3-PDF folder.
 
@@ -36,15 +39,14 @@ def export_slide_to_pdf(slide_id: str, entity_name: str, l3_folder_id: str, cred
     Returns:
         bool: True if successful, False otherwise
     """
-    drive_service = build('drive', 'v3', credentials=creds)
+    drive_service = build("drive", "v3", credentials=creds)
 
     print(f"  Exporting slide to PDF for {entity_name}...")
 
     def _export_pdf():
         # Export the presentation as PDF
         request = drive_service.files().export(
-            fileId=slide_id,
-            mimeType='application/pdf'
+            fileId=slide_id, mimeType="application/pdf"
         )
 
         pdf_content = io.BytesIO()
@@ -66,21 +68,24 @@ def export_slide_to_pdf(slide_id: str, entity_name: str, l3_folder_id: str, cred
                 return False
 
         # Upload the PDF to L3-PDF folder
-        media = MediaIoBaseUpload(io.BytesIO(pdf_bytes), mimetype='application/pdf', resumable=True)
+        media = MediaIoBaseUpload(
+            io.BytesIO(pdf_bytes), mimetype="application/pdf", resumable=True
+        )
 
-        file_metadata = {
-            'name': pdf_filename,
-            'parents': [l3_folder_id]
-        }
+        file_metadata = {"name": pdf_filename, "parents": [l3_folder_id]}
 
-        uploaded_file = drive_service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id, name',
-            supportsAllDrives=True
-        ).execute()
+        uploaded_file = (
+            drive_service.files()
+            .create(
+                body=file_metadata,
+                media_body=media,
+                fields="id, name",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
 
-        return uploaded_file.get('id') is not None
+        return uploaded_file.get("id") is not None
 
     try:
         pdf_id = retry_with_exponential_backoff(_export_pdf)

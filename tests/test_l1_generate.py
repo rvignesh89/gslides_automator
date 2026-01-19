@@ -61,12 +61,16 @@ class TestL1GenerateSingleEntity:
             f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id, name)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id, name)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         folders = results.get("files", [])
         assert len(folders) == 1
@@ -80,12 +84,16 @@ class TestL1GenerateSingleEntity:
             f"and '{entity_folder_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id, name)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id, name)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         spreadsheets = results.get("files", [])
         assert len(spreadsheets) == 1
@@ -102,12 +110,16 @@ class TestL1GenerateSingleEntity:
             f"and '{entity_folder_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id, name)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id, name)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         images = results.get("files", [])
         assert len(images) == 1
@@ -197,12 +209,16 @@ class TestL1CSVProcessing:
             f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         spreadsheet_id = results["files"][0]["id"]
 
@@ -212,12 +228,16 @@ class TestL1CSVProcessing:
         assert len(data) >= 2  # At least header + one data row
 
         # Verify chart sheet
-        chart_data = get_spreadsheet_data(spreadsheet_id, "chart-sales", test_credentials)
+        chart_data = get_spreadsheet_data(
+            spreadsheet_id, "chart-sales", test_credentials
+        )
         assert chart_data is not None
         assert len(chart_data) >= 2
 
         # Verify table sheet
-        table_data = get_spreadsheet_data(spreadsheet_id, "table-performance", test_credentials)
+        table_data = get_spreadsheet_data(
+            spreadsheet_id, "table-performance", test_credentials
+        )
         assert table_data is not None
         assert len(table_data) >= 2
 
@@ -264,12 +284,16 @@ class TestL1ImageCopying:
             f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         entity_folder_id = results["files"][0]["id"]
 
@@ -279,12 +303,16 @@ class TestL1ImageCopying:
             f"and '{entity_folder_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id, name)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id, name)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         images = results.get("files", [])
         assert len(images) == 1
@@ -340,12 +368,16 @@ class TestL1EntityFiltering:
             f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         assert len(results.get("files", [])) == 0
 
@@ -457,4 +489,3 @@ class TestL1ErrorCases:
         assert isinstance(result, dict)
         assert "successful" in result
         assert "failed" in result
-

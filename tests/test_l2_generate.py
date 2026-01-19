@@ -40,12 +40,16 @@ class TestL2GenerateSingleEntity:
             f"and '{layout.l2_slide_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id, name)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id, name)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         presentations = results.get("files", [])
         assert len(presentations) == 1
@@ -103,12 +107,16 @@ class TestL2PlaceholderReplacement:
             f"and '{layout.l2_slide_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         if results.get("files"):
             presentation_id = results["files"][0]["id"]
@@ -261,4 +269,3 @@ class TestL2ErrorCases:
         # Run generate - should fail due to invalid template
         result = generate(creds=test_credentials, layout=test_drive_layout)
         assert "entity-1" not in result["successful"]
-

@@ -45,11 +45,15 @@ def create_test_drive_structure(root_id: str, creds) -> DriveLayout:
             "mimeType": "application/vnd.google-apps.folder",
             "parents": [root_id],
         }
-        folder = drive_service.files().create(
-            body=file_metadata,
-            fields="id",
-            supportsAllDrives=True,
-        ).execute()
+        folder = (
+            drive_service.files()
+            .create(
+                body=file_metadata,
+                fields="id",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
         folders[key] = folder.get("id")
 
     return DriveLayout(
@@ -110,12 +114,16 @@ def create_test_entities_csv(
         resumable=False,
     )
 
-    file = drive_service.files().create(
-        body=file_metadata,
-        media_body=media,
-        fields="id",
-        supportsAllDrives=True,
-    ).execute()
+    file = (
+        drive_service.files()
+        .create(
+            body=file_metadata,
+            media_body=media,
+            fields="id",
+            supportsAllDrives=True,
+        )
+        .execute()
+    )
 
     return file.get("id")
 
@@ -141,11 +149,15 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
         "parents": [templates_folder_id],
     }
 
-    spreadsheet_file = drive_service.files().create(
-        body=file_metadata,
-        fields="id",
-        supportsAllDrives=True,
-    ).execute()
+    spreadsheet_file = (
+        drive_service.files()
+        .create(
+            body=file_metadata,
+            fields="id",
+            supportsAllDrives=True,
+        )
+        .execute()
+    )
 
     spreadsheet_id = spreadsheet_file.get("id")
     spreadsheet = gspread_client.open_by_key(spreadsheet_id)
@@ -161,8 +173,14 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
         common_data_sheet = spreadsheet.worksheet("common_data")
 
     # Add headers and sample data to common_data
-    common_data_sheet.update(range_name="A1:E1", values=[["entity_name", "brand_name", "year", "region", "status"]])
-    common_data_sheet.update(range_name="A2:E2", values=[["entity-1", "TestBrand", "2024", "North", "Active"]])
+    common_data_sheet.update(
+        range_name="A1:E1",
+        values=[["entity_name", "brand_name", "year", "region", "status"]],
+    )
+    common_data_sheet.update(
+        range_name="A2:E2",
+        values=[["entity-1", "TestBrand", "2024", "North", "Active"]],
+    )
 
     # Create data sheet for text placeholders
     try:
@@ -172,12 +190,15 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
 
     # Add sample placeholder data
     data_sheet.update(range_name="A1:B1", values=[["placeholder", "value"]])
-    data_sheet.update(range_name="A2:B5", values=[
-        ["brand_name_", "TestBrand"],
-        ["year_", "2024"],
-        ["region_", "North"],
-        ["status_", "Active"],
-    ])
+    data_sheet.update(
+        range_name="A2:B5",
+        values=[
+            ["brand_name_", "TestBrand"],
+            ["year_", "2024"],
+            ["region_", "North"],
+            ["status_", "Active"],
+        ],
+    )
 
     # Create chart sheet
     try:
@@ -186,25 +207,33 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
         chart_sheet = spreadsheet.worksheet("chart-sales")
 
     chart_sheet.update(range_name="A1:C1", values=[["Month", "Sales", "Target"]])
-    chart_sheet.update(range_name="A2:C5", values=[
-        ["Jan", "1000", "1200"],
-        ["Feb", "1200", "1200"],
-        ["Mar", "1500", "1300"],
-        ["Apr", "1400", "1400"],
-    ])
+    chart_sheet.update(
+        range_name="A2:C5",
+        values=[
+            ["Jan", "1000", "1200"],
+            ["Feb", "1200", "1200"],
+            ["Mar", "1500", "1300"],
+            ["Apr", "1400", "1400"],
+        ],
+    )
 
     # Create table sheet
     try:
-        table_sheet = spreadsheet.add_worksheet(title="table-performance", rows=10, cols=4)
+        table_sheet = spreadsheet.add_worksheet(
+            title="table-performance", rows=10, cols=4
+        )
     except Exception:
         table_sheet = spreadsheet.worksheet("table-performance")
 
     table_sheet.update(range_name="A1:D1", values=[["Metric", "Q1", "Q2", "Q3"]])
-    table_sheet.update(range_name="A2:D4", values=[
-        ["Revenue", "10000", "12000", "15000"],
-        ["Profit", "2000", "2500", "3000"],
-        ["Growth", "10%", "15%", "20%"],
-    ])
+    table_sheet.update(
+        range_name="A2:D4",
+        values=[
+            ["Revenue", "10000", "12000", "15000"],
+            ["Profit", "2000", "2500", "3000"],
+            ["Growth", "10%", "15%", "20%"],
+        ],
+    )
 
     # Delete default Sheet1 if it exists
     try:
@@ -239,37 +268,49 @@ def create_test_slide_template(templates_folder_id: str, creds) -> str:
     }
 
     # Create empty presentation file in the folder
-    presentation_file = drive_service.files().create(
-        body=file_metadata,
-        fields="id",
-        supportsAllDrives=True,
-    ).execute()
+    presentation_file = (
+        drive_service.files()
+        .create(
+            body=file_metadata,
+            fields="id",
+            supportsAllDrives=True,
+        )
+        .execute()
+    )
 
     presentation_id = presentation_file.get("id")
 
     # Now use Slides API to add content to the presentation
     # Get the presentation to check for slides
-    presentation = slides_service.presentations().get(
-        presentationId=presentation_id,
-    ).execute()
+    presentation = (
+        slides_service.presentations()
+        .get(
+            presentationId=presentation_id,
+        )
+        .execute()
+    )
 
     # Get the first slide (presentations always have at least one slide)
     slides = presentation.get("slides", [])
     if not slides:
         # Create a slide if none exists (shouldn't happen, but handle it)
-        create_result = slides_service.presentations().batchUpdate(
-            presentationId=presentation_id,
-            body={
-                "requests": [{
-                    "createSlide": {
-                        "insertionIndex": 0,
-                        "slideLayoutReference": {
-                            "predefinedLayout": "BLANK"
+        create_result = (
+            slides_service.presentations()
+            .batchUpdate(
+                presentationId=presentation_id,
+                body={
+                    "requests": [
+                        {
+                            "createSlide": {
+                                "insertionIndex": 0,
+                                "slideLayoutReference": {"predefinedLayout": "BLANK"},
+                            }
                         }
-                    }
-                }]
-            }
-        ).execute()
+                    ]
+                },
+            )
+            .execute()
+        )
         slide_id = create_result["replies"][0]["createSlide"]["objectId"]
     else:
         slide_id = slides[0].get("objectId")
@@ -278,58 +319,72 @@ def create_test_slide_template(templates_folder_id: str, creds) -> str:
     requests = []
 
     # Add a title with placeholder
-    requests.append({
-        "createShape": {
-            "objectId": f"title_{uuid.uuid4().hex[:8]}",
-            "shapeType": "TEXT_BOX",
-            "elementProperties": {
-                "pageObjectId": slide_id,
-                "size": {"height": {"magnitude": 400000, "unit": "EMU"}, "width": {"magnitude": 6000000, "unit": "EMU"}},
-                "transform": {
-                    "scaleX": 1.0,
-                    "scaleY": 1.0,
-                    "translateX": 100000,
-                    "translateY": 100000,
-                    "unit": "EMU",
+    requests.append(
+        {
+            "createShape": {
+                "objectId": f"title_{uuid.uuid4().hex[:8]}",
+                "shapeType": "TEXT_BOX",
+                "elementProperties": {
+                    "pageObjectId": slide_id,
+                    "size": {
+                        "height": {"magnitude": 400000, "unit": "EMU"},
+                        "width": {"magnitude": 6000000, "unit": "EMU"},
+                    },
+                    "transform": {
+                        "scaleX": 1.0,
+                        "scaleY": 1.0,
+                        "translateX": 100000,
+                        "translateY": 100000,
+                        "unit": "EMU",
+                    },
                 },
             },
-        },
-    })
+        }
+    )
 
     # Add text content with placeholder
-    requests.append({
-        "insertText": {
-            "objectId": requests[-1]["createShape"]["objectId"],
-            "text": "{{brand_name_}} Report - {{year_}}",
-        },
-    })
+    requests.append(
+        {
+            "insertText": {
+                "objectId": requests[-1]["createShape"]["objectId"],
+                "text": "{{brand_name_}} Report - {{year_}}",
+            },
+        }
+    )
 
     # Add another text box with placeholder
     text_box_id = f"text_{uuid.uuid4().hex[:8]}"
-    requests.append({
-        "createShape": {
-            "objectId": text_box_id,
-            "shapeType": "TEXT_BOX",
-            "elementProperties": {
-                "pageObjectId": slide_id,
-                "size": {"height": {"magnitude": 200000, "unit": "EMU"}, "width": {"magnitude": 6000000, "unit": "EMU"}},
-                "transform": {
-                    "scaleX": 1.0,
-                    "scaleY": 1.0,
-                    "translateX": 100000,
-                    "translateY": 600000,
-                    "unit": "EMU",
+    requests.append(
+        {
+            "createShape": {
+                "objectId": text_box_id,
+                "shapeType": "TEXT_BOX",
+                "elementProperties": {
+                    "pageObjectId": slide_id,
+                    "size": {
+                        "height": {"magnitude": 200000, "unit": "EMU"},
+                        "width": {"magnitude": 6000000, "unit": "EMU"},
+                    },
+                    "transform": {
+                        "scaleX": 1.0,
+                        "scaleY": 1.0,
+                        "translateX": 100000,
+                        "translateY": 600000,
+                        "unit": "EMU",
+                    },
                 },
             },
-        },
-    })
+        }
+    )
 
-    requests.append({
-        "insertText": {
-            "objectId": text_box_id,
-            "text": "Region: {{region_}}\nStatus: {{status_}}",
-        },
-    })
+    requests.append(
+        {
+            "insertText": {
+                "objectId": text_box_id,
+                "text": "Region: {{region_}}\nStatus: {{status_}}",
+            },
+        }
+    )
 
     # Execute batch update
     if requests:
@@ -366,11 +421,15 @@ def create_test_l0_data(
         "parents": [l0_root_id],
     }
 
-    folder = drive_service.files().create(
-        body=file_metadata,
-        fields="id",
-        supportsAllDrives=True,
-    ).execute()
+    folder = (
+        drive_service.files()
+        .create(
+            body=file_metadata,
+            fields="id",
+            supportsAllDrives=True,
+        )
+        .execute()
+    )
 
     entity_folder_id = folder.get("id")
 
@@ -464,12 +523,16 @@ def cleanup_test_drive(root_id: str, creds) -> None:
 
     try:
         # List all files in the root folder
-        results = drive_service.files().list(
-            q=f"'{root_id}' in parents and trashed=false",
-            fields="files(id, name, mimeType)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=f"'{root_id}' in parents and trashed=false",
+                fields="files(id, name, mimeType)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         files = results.get("files", [])
 
@@ -513,11 +576,15 @@ def verify_drive_structure(layout: DriveLayout, creds) -> bool:
 
     for folder_name, folder_id in required_folders.items():
         try:
-            folder = drive_service.files().get(
-                fileId=folder_id,
-                fields="id, name, mimeType",
-                supportsAllDrives=True,
-            ).execute()
+            folder = (
+                drive_service.files()
+                .get(
+                    fileId=folder_id,
+                    fields="id, name, mimeType",
+                    supportsAllDrives=True,
+                )
+                .execute()
+            )
 
             if folder.get("mimeType") != "application/vnd.google-apps.folder":
                 return False
@@ -527,7 +594,9 @@ def verify_drive_structure(layout: DriveLayout, creds) -> bool:
     return True
 
 
-def get_spreadsheet_data(spreadsheet_id: str, sheet_name: str, creds) -> Optional[List[List[str]]]:
+def get_spreadsheet_data(
+    spreadsheet_id: str, sheet_name: str, creds
+) -> Optional[List[List[str]]]:
     """
     Get all data from a spreadsheet sheet.
 
@@ -564,9 +633,13 @@ def get_slide_text_content(presentation_id: str, slide_index: int, creds) -> str
     slides_service = build("slides", "v1", credentials=creds)
 
     try:
-        presentation = slides_service.presentations().get(
-            presentationId=presentation_id,
-        ).execute()
+        presentation = (
+            slides_service.presentations()
+            .get(
+                presentationId=presentation_id,
+            )
+            .execute()
+        )
 
         slides = presentation.get("slides", [])
         if slide_index >= len(slides):
@@ -582,9 +655,10 @@ def get_slide_text_content(presentation_id: str, slide_index: int, creds) -> str
                     text_elements = shape["text"].get("textElements", [])
                     for text_element in text_elements:
                         if "textRun" in text_element:
-                            text_content.append(text_element["textRun"].get("content", ""))
+                            text_content.append(
+                                text_element["textRun"].get("content", "")
+                            )
 
         return "".join(text_content)
     except Exception:
         return ""
-

@@ -48,7 +48,9 @@ def generate_entity(entity_flags: EntityFlags, creds, layout: DriveLayout) -> No
     entity_name = entity_flags.entity_name
 
     # Check if there's any processing to do
-    skip_processing = not (entity_flags.l1 or entity_flags.l2 is not None or entity_flags.l3)
+    skip_processing = not (
+        entity_flags.l1 or entity_flags.l2 is not None or entity_flags.l3
+    )
     if skip_processing:
         print(f"No processing to do for entity: {entity_name}")
         return
@@ -92,7 +94,9 @@ def generate_entity(entity_flags: EntityFlags, creds, layout: DriveLayout) -> No
         # Find spreadsheet in entity folder
         spreadsheets = list_spreadsheets_in_folder(entity_folder_id, creds)
         if not spreadsheets:
-            raise Exception(f"No spreadsheet found in L1-Merged folder for entity '{entity_name}'")
+            raise Exception(
+                f"No spreadsheet found in L1-Merged folder for entity '{entity_name}'"
+            )
 
         if len(spreadsheets) > 1:
             print("  ⚠️  Multiple spreadsheets found, using the first one")
@@ -124,13 +128,19 @@ def generate_entity(entity_flags: EntityFlags, creds, layout: DriveLayout) -> No
 
         # Find the presentation if not already known
         if not presentation_id:
-            presentation_id = find_existing_presentation(entity_name, layout.l2_slide_id, creds)
+            presentation_id = find_existing_presentation(
+                entity_name, layout.l2_slide_id, creds
+            )
 
         if not presentation_id:
-            raise Exception(f"Presentation not found for entity '{entity_name}' in L2-Slides folder")
+            raise Exception(
+                f"Presentation not found for entity '{entity_name}' in L2-Slides folder"
+            )
 
         # Export to PDF
-        if not export_slide_to_pdf(presentation_id, entity_name, layout.l3_pdf_id, creds):
+        if not export_slide_to_pdf(
+            presentation_id, entity_name, layout.l3_pdf_id, creds
+        ):
             raise Exception(f"L3 PDF export failed for entity '{entity_name}'")
 
         print(f"[L3] ✓ Successfully generated L3-PDF for {entity_name}\n")
@@ -170,7 +180,7 @@ def generate(creds=None, layout: DriveLayout = None):
 
     if not entities:
         print("⚠️  No entities found\n")
-        return {'successful': [], 'failed': []}
+        return {"successful": [], "failed": []}
 
     print(f"✓ Loaded {len(entities)} entities\n")
 
@@ -182,7 +192,9 @@ def generate(creds=None, layout: DriveLayout = None):
         entity_name = entity_flags.entity_name
 
         # Check if there's any processing to do
-        has_processing = entity_flags.l1 or entity_flags.l2 is not None or entity_flags.l3
+        has_processing = (
+            entity_flags.l1 or entity_flags.l2 is not None or entity_flags.l3
+        )
 
         # Only print and process if there's processing to do
         if has_processing:
@@ -194,17 +206,19 @@ def generate(creds=None, layout: DriveLayout = None):
                 successful.append(entity_name)
         except Exception as e:
             error_msg = str(e)
-            print(f"\n{'='*80}")
+            print(f"\n{'=' * 80}")
             print(f"✗ ERROR processing entity '{entity_name}': {error_msg}")
-            print(f"{'='*80}\n")
+            print(f"{'=' * 80}\n")
             failed.append(entity_name)
             # Stop immediately on error as per requirements
-            raise Exception(f"Stopped processing due to error in entity '{entity_name}': {error_msg}")
+            raise Exception(
+                f"Stopped processing due to error in entity '{entity_name}': {error_msg}"
+            )
 
     # Print summary
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("PROCESSING SUMMARY ")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
     print(f"Total entities: {len(entities)}")
     print(f"Successful: {len(successful)}")
     print(f"Failed: {len(failed)}")
@@ -224,7 +238,7 @@ def generate(creds=None, layout: DriveLayout = None):
 
     print("=" * 80)
 
-    return {'successful': successful, 'failed': failed}
+    return {"successful": successful, "failed": failed}
 
 
 def main():
@@ -232,17 +246,17 @@ def main():
     Main function to process entities (CLI entry point).
     """
     parser = argparse.ArgumentParser(
-        description='Generate L1-Merged, L2-Slides, and L3-PDF for entities in entities.csv'
+        description="Generate L1-Merged, L2-Slides, and L3-PDF for entities in entities.csv"
     )
     parser.add_argument(
-        '--shared-drive-url',
+        "--shared-drive-url",
         required=True,
-        help='Shared Drive root URL or ID that contains L0/L1/L2/L3 data and templates.',
+        help="Shared Drive root URL or ID that contains L0/L1/L2/L3 data and templates.",
     )
     parser.add_argument(
-        '--service-account-credentials',
+        "--service-account-credentials",
         default=None,
-        help='Path to the service account JSON key file.',
+        help="Path to the service account JSON key file.",
     )
     args = parser.parse_args()
 
@@ -252,15 +266,14 @@ def main():
     try:
         # Get credentials
         print("Authenticating...")
-        creds = get_oauth_credentials(service_account_credentials=args.service_account_credentials)
+        creds = get_oauth_credentials(
+            service_account_credentials=args.service_account_credentials
+        )
 
         layout = resolve_layout(args.shared_drive_url, creds)
 
         # Call the main function
-        generate(
-            creds=creds,
-            layout=layout
-        )
+        generate(creds=creds, layout=layout)
 
     except ValueError as e:
         print(f"\nError: {e}")
@@ -271,17 +284,24 @@ def main():
             print("\nTo set up service account credentials:")
             print("1. Go to Google Cloud Console (https://console.cloud.google.com/)")
             print("2. Create a new project or select an existing one")
-            print("3. Enable Google Sheets API, Google Slides API, and Google Drive API")
+            print(
+                "3. Enable Google Sheets API, Google Slides API, and Google Drive API"
+            )
             print("4. Go to 'Credentials' → 'Create Credentials' → 'Service account'")
             print("5. Create a service account and download the JSON key file")
             from gslides_automator.auth import PROJECT_ROOT as AUTH_PROJECT_ROOT
-            print(f"6. Save the JSON key file as 'service-account-credentials.json' in: {AUTH_PROJECT_ROOT}")
+
+            print(
+                f"6. Save the JSON key file as 'service-account-credentials.json' in: {AUTH_PROJECT_ROOT}"
+            )
         sys.exit(1)
     except Exception as e:
         print(f"\nError: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

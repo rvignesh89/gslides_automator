@@ -78,11 +78,15 @@ class TestResolveLayout:
             "name": "test-empty-folder",
             "mimeType": "application/vnd.google-apps.folder",
         }
-        folder = drive_service.files().create(
-            body=file_metadata,
-            fields="id",
-            supportsAllDrives=True,
-        ).execute()
+        folder = (
+            drive_service.files()
+            .create(
+                body=file_metadata,
+                fields="id",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
 
         root_id = folder.get("id")
 
@@ -182,7 +186,9 @@ class TestLoadEntitiesWithSlides:
         assert loaded["entity-1"] is None  # None means all slides
         assert loaded["entity-2"] is None
 
-    def test_load_entities_with_slides_specific(self, test_drive_layout, test_credentials):
+    def test_load_entities_with_slides_specific(
+        self, test_drive_layout, test_credentials
+    ):
         """Test loading entities with specific slide numbers."""
         entities = {
             "entity-1": {"l1": "Y", "l2": "1,2,3", "l3": "N"},
@@ -232,4 +238,3 @@ class TestLoadEntitiesWithSlides:
         loaded = load_entities_with_slides(csv_file_id, test_credentials)
 
         assert loaded["entity-1"] == {1, 3, 5, 6, 7}
-

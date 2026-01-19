@@ -48,11 +48,15 @@ def _extract_id_from_url(shared_drive_url: str) -> str:
         re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_\-]*[A-Za-z0-9_]", shared_drive_url)
         and len(shared_drive_url) >= 19
         and " " not in shared_drive_url
-        and not re.search(r"[a-z]+-[a-z]+-[a-z]+", shared_drive_url)  # Reject phrase-like patterns
+        and not re.search(
+            r"[a-z]+-[a-z]+-[a-z]+", shared_drive_url
+        )  # Reject phrase-like patterns
     ):
         return shared_drive_url
 
-    raise ValueError("Could not extract Drive folder ID from URL. Pass a folder link or ID.")
+    raise ValueError(
+        "Could not extract Drive folder ID from URL. Pass a folder link or ID."
+    )
 
 
 def _find_child_by_name(
@@ -68,14 +72,20 @@ def _find_child_by_name(
     mime_clause = f" and mimeType='{mime_type}'" if mime_type else ""
 
     for name in candidates:
-        query = f"'{parent_id}' in parents and name='{name}' and trashed=false{mime_clause}"
-        result = drive_service.files().list(
-            q=query,
-            fields="files(id,name,mimeType)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-            pageSize=5,
-        ).execute()
+        query = (
+            f"'{parent_id}' in parents and name='{name}' and trashed=false{mime_clause}"
+        )
+        result = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id,name,mimeType)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+                pageSize=5,
+            )
+            .execute()
+        )
         files = result.get("files", [])
         if files:
             return files[0]["id"]
@@ -95,7 +105,10 @@ def _find_or_create_folder(
     """
     try:
         return _find_child_by_name(
-            drive_service, parent_id, folder_name, mime_type="application/vnd.google-apps.folder"
+            drive_service,
+            parent_id,
+            folder_name,
+            mime_type="application/vnd.google-apps.folder",
         )
     except FileNotFoundError:
         # Create the folder if it doesn't exist
@@ -104,11 +117,15 @@ def _find_or_create_folder(
             "mimeType": "application/vnd.google-apps.folder",
             "parents": [parent_id],
         }
-        folder = drive_service.files().create(
-            body=file_metadata,
-            fields="id",
-            supportsAllDrives=True,
-        ).execute()
+        folder = (
+            drive_service.files()
+            .create(
+                body=file_metadata,
+                fields="id",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
         return folder.get("id")
 
 
@@ -178,7 +195,9 @@ def load_entities(entities_csv_id: str, creds) -> List[str]:
     and new format (Entity, L1, L2, L3).
     """
     drive_service = build("drive", "v3", credentials=creds)
-    request = drive_service.files().get_media(fileId=entities_csv_id, supportsAllDrives=True)
+    request = drive_service.files().get_media(
+        fileId=entities_csv_id, supportsAllDrives=True
+    )
     buffer = io.BytesIO()
     downloader = MediaIoBaseDownload(buffer, request)
     done = False
@@ -209,6 +228,7 @@ def load_entities(entities_csv_id: str, creds) -> List[str]:
         if flag.upper() == "Y":
             entities.append(name)
     return entities
+
 
 def _parse_slides_value(slides_value: str) -> Optional[Set[int]]:
     """
@@ -264,7 +284,9 @@ def _parse_slides_value(slides_value: str) -> Optional[Set[int]]:
     return slides or None
 
 
-def load_entities_with_slides(entities_csv_id: str, creds) -> Dict[str, Optional[Set[int]]]:
+def load_entities_with_slides(
+    entities_csv_id: str, creds
+) -> Dict[str, Optional[Set[int]]]:
     """
     Download entities.csv and return a mapping of entity name to requested slide
     numbers for rows marked with L1=Y (or Generate=Y for old format).
@@ -272,7 +294,9 @@ def load_entities_with_slides(entities_csv_id: str, creds) -> Dict[str, Optional
     Works with both old format (Entity, Generate, Slides) and new format (Entity, L1, L2, L3).
     """
     drive_service = build("drive", "v3", credentials=creds)
-    request = drive_service.files().get_media(fileId=entities_csv_id, supportsAllDrives=True)
+    request = drive_service.files().get_media(
+        fileId=entities_csv_id, supportsAllDrives=True
+    )
     buffer = io.BytesIO()
     downloader = MediaIoBaseDownload(buffer, request)
     done = False
@@ -312,9 +336,12 @@ def load_entities_with_slides(entities_csv_id: str, creds) -> Dict[str, Optional
 @dataclass
 class EntityFlags:
     """Flags for entity generation from entities.csv."""
+
     entity_name: str
     l1: bool  # True if L1 should be generated
-    l2: Optional[Set[int]]  # None if L2 should not be processed, Set[int] for specific slides, special value for all slides
+    l2: Optional[
+        Set[int]
+    ]  # None if L2 should not be processed, Set[int] for specific slides, special value for all slides
     l3: bool  # True if L3 PDF should be generated
 
 
@@ -336,7 +363,9 @@ def load_entities_with_flags(entities_csv_id: str, creds) -> List[EntityFlags]:
         List of EntityFlags objects
     """
     drive_service = build("drive", "v3", credentials=creds)
-    request = drive_service.files().get_media(fileId=entities_csv_id, supportsAllDrives=True)
+    request = drive_service.files().get_media(
+        fileId=entities_csv_id, supportsAllDrives=True
+    )
     buffer = io.BytesIO()
     downloader = MediaIoBaseDownload(buffer, request)
     done = False
@@ -373,18 +402,14 @@ def load_entities_with_flags(entities_csv_id: str, creds) -> List[EntityFlags]:
         if not l2_value or not l2_value.strip():
             l2_slides = None  # Don't process L2
         else:
-            l2_slides = _parse_slides_value(l2_value)  # None for "All", Set[int] for specific slides
+            l2_slides = _parse_slides_value(
+                l2_value
+            )  # None for "All", Set[int] for specific slides
             # If _parse_slides_value returns None (meaning "all slides"), use empty set as sentinel
             if l2_slides is None:
                 l2_slides = set()  # Empty set means "all slides"
         l3 = l3_value.upper() == "Y"
 
-        entities.append(EntityFlags(
-            entity_name=name,
-            l1=l1,
-            l2=l2_slides,
-            l3=l3
-        ))
+        entities.append(EntityFlags(entity_name=name, l1=l1, l2=l2_slides, l3=l3))
 
     return entities
-

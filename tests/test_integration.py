@@ -58,12 +58,16 @@ class TestFullWorkflow:
             f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         assert len(results.get("files", [])) == 1
         entity_folder_id = results["files"][0]["id"]
@@ -75,12 +79,16 @@ class TestFullWorkflow:
             f"and '{entity_folder_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         assert len(results.get("files", [])) == 1
         spreadsheet_id = results["files"][0]["id"]
@@ -97,12 +105,16 @@ class TestFullWorkflow:
             f"and '{test_drive_layout.l2_slide_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         assert len(results.get("files", [])) == 1
         presentation_id = results["files"][0]["id"]
@@ -121,12 +133,16 @@ class TestFullWorkflow:
             f"and '{test_drive_layout.l3_pdf_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         assert len(results.get("files", [])) == 1
         pdf_id = results["files"][0]["id"]
@@ -156,12 +172,16 @@ class TestFullWorkflow:
                 f"and '{layout.l2_slide_id}' in parents "
                 f"and trashed=false"
             )
-            results = drive_service.files().list(
-                q=query,
-                fields="files(id)",
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            ).execute()
+            results = (
+                drive_service.files()
+                .list(
+                    q=query,
+                    fields="files(id)",
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                )
+                .execute()
+            )
 
             assert len(results.get("files", [])) == 1
 
@@ -287,12 +307,16 @@ class TestWorkflowDataIntegrity:
             f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         assert len(results.get("files", [])) == 1
         entity_folder_id = results["files"][0]["id"]
@@ -304,12 +328,16 @@ class TestWorkflowDataIntegrity:
             f"and '{entity_folder_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         assert len(results.get("files", [])) == 1
         spreadsheet_id = results["files"][0]["id"]
@@ -331,14 +359,17 @@ class TestWorkflowDataIntegrity:
             f"and '{test_drive_layout.l3_pdf_id}' in parents "
             f"and trashed=false"
         )
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
         assert len(results.get("files", [])) == 1
         pdf_id = results["files"][0]["id"]
         assert pdf_id is not None
-
