@@ -45,7 +45,6 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -e ".[dev]"
-        pip install -r tests/requirements.txt
 
     - name: Run pytest
       run: pytest tests/

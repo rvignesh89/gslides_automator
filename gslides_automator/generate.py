@@ -1,20 +1,13 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """
 Unified script to generate L1-Merged, L2-Slides, and L3-PDF from entities.csv.
 Processes each entity sequentially (L1 → L2 → L3) and stops on any error.
 """
 
+from __future__ import annotations
 import os
 import sys
 import argparse
-
-
-# Add project root to path to import modules
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-sys.path.insert(0, PROJECT_ROOT)
-
 from gslides_automator.drive_layout import (
     DriveLayout,
     EntityFlags,
@@ -32,6 +25,11 @@ from gslides_automator.l2_generate import (
     list_entity_folders,
 )
 from gslides_automator.l3_generate import export_slide_to_pdf
+# Add project root to path to import modules
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+sys.path.insert(0, PROJECT_ROOT)
 
 
 def generate_entity(entity_flags: EntityFlags, creds, layout: DriveLayout) -> None:

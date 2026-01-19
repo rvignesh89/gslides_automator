@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """
 Script to generate L1-Merged from L0-Raw for entities in Tamil Nadu.
 Reads CSV files and images from L0-Raw folder, clones entity data templates,
 populates Google Sheets tabs with CSV data, and copies images to L1-Merged folder.
 """
 
+from __future__ import annotations
+import sys
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload
+from gslides_automator.drive_layout import DriveLayout
 import gspread
 import os
-import sys
 import time
 import csv
 import io
@@ -20,8 +21,6 @@ import io
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
-
-from gslides_automator.drive_layout import DriveLayout
 
 def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_delay=60, backoff_factor=2):
     """

@@ -1,28 +1,27 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """
 Script to export Google Slides presentations to PDF format.
 Exports presentations from L2-Slides folder and saves them to L3-PDF folder.
 """
 
-import os
+from __future__ import annotations
 import sys
+import os
 import io
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
-
-# Add project root to path to import modules
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-sys.path.insert(0, PROJECT_ROOT)
-
 from gslides_automator.l1_generate import (
     find_existing_file,
     delete_file,
     retry_with_exponential_backoff,
 )
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
+
+# Add project root to path to import modules
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+sys.path.insert(0, PROJECT_ROOT)
 
 def export_slide_to_pdf(slide_id: str, entity_name: str, l3_folder_id: str, creds) -> bool:
     """

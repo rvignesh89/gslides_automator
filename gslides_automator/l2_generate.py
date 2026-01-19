@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """
 Script to dynamically generate Google Slides presentations from Google Sheets.
 Processes multiple entity spreadsheets from a Google Drive folder.
@@ -7,6 +6,7 @@ For each spreadsheet, reads sheets named <type>-<placeholder> (chart/table/pictu
 copies a template presentation, and replaces placeholders with linked assets from the sheets.
 """
 
+from __future__ import annotations
 import gspread
 import os
 import sys
@@ -21,15 +21,6 @@ _TABLE_SLIDE_PROCEED_DECISION: Optional[bool] = None  # Session-level choice for
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
-try:
-    from gslides_automator.auth import get_oauth_credentials
-    from gslides_automator.drive_layout import (
-        DriveLayout,
-        load_entities_with_slides,
-        resolve_layout,
-    )
-except ImportError:  # Fallback for package-relative execution
-    pass
 
 def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_delay=60, backoff_factor=2):
     """
