@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from googleapiclient.discovery import build
 
-from gslides_automator.l1_generate import l1_generate
+from gslides_automator.generate import generate
 from tests.test_utils import (
     create_test_l0_data,
     get_spreadsheet_data,
@@ -29,7 +29,7 @@ class TestL1GenerateSingleEntity:
         from tests.test_utils import create_test_entities_csv
 
         entities = {
-            "entity-1": {"generate": "Y", "slides": ""},
+            "entity-1": {"l1": "Y", "l2": "", "l3": "N"},
         }
 
         csv_file_id = create_test_entities_csv(
@@ -41,13 +41,13 @@ class TestL1GenerateSingleEntity:
 
         # Create L0 data
         create_test_l0_data(
-            test_drive_layout.l0_data_id,
+            test_drive_layout.l0_raw_id,
             "entity-1",
             test_credentials,
         )
 
-        # Run L1 generate
-        result = l1_generate(creds=test_credentials, layout=test_drive_layout)
+        # Run generate (L1 only)
+        result = generate(creds=test_credentials, layout=test_drive_layout)
 
         # Verify results
         assert result["successful"] == ["entity-1"]
@@ -60,7 +60,7 @@ class TestL1GenerateSingleEntity:
         query = (
             f"mimeType='application/vnd.google-apps.folder' "
             f"and name='entity-1' "
-            f"and '{test_drive_layout.l1_data_id}' in parents "
+            f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
         results = drive_service.files().list(
@@ -128,9 +128,9 @@ class TestL1GenerateMultipleEntities:
         from tests.test_utils import create_test_entities_csv
 
         entities = {
-            "entity-1": {"generate": "Y", "slides": ""},
-            "entity-2": {"generate": "Y", "slides": ""},
-            "entity-3": {"generate": "N", "slides": ""},  # Should be skipped
+            "entity-1": {"l1": "Y", "l2": "", "l3": "N"},
+            "entity-2": {"l1": "Y", "l2": "", "l3": "N"},
+            "entity-3": {"l1": "N", "l2": "", "l3": "N"},  # Should be skipped
         }
 
         csv_file_id = create_test_entities_csv(
@@ -143,13 +143,13 @@ class TestL1GenerateMultipleEntities:
         # Create L0 data for all entities
         for entity_name in ["entity-1", "entity-2", "entity-3"]:
             create_test_l0_data(
-                test_drive_layout.l0_data_id,
+                test_drive_layout.l0_raw_id,
                 entity_name,
                 test_credentials,
             )
 
-        # Run L1 generate
-        result = l1_generate(creds=test_credentials, layout=test_drive_layout)
+        # Run generate (L1 only)
+        result = generate(creds=test_credentials, layout=test_drive_layout)
 
         # Verify results
         assert len(result["successful"]) == 2
@@ -172,7 +172,7 @@ class TestL1CSVProcessing:
         from tests.test_utils import create_test_entities_csv
 
         entities = {
-            "entity-1": {"generate": "Y", "slides": ""},
+            "entity-1": {"l1": "Y", "l2": "", "l3": "N"},
         }
 
         csv_file_id = create_test_entities_csv(
@@ -183,12 +183,12 @@ class TestL1CSVProcessing:
         test_drive_layout.entities_csv_id = csv_file_id
 
         create_test_l0_data(
-            test_drive_layout.l0_data_id,
+            test_drive_layout.l0_raw_id,
             "entity-1",
             test_credentials,
         )
 
-        result = l1_generate(creds=test_credentials, layout=test_drive_layout)
+        result = generate(creds=test_credentials, layout=test_drive_layout)
         assert result["successful"] == ["entity-1"]
 
         # Find the created spreadsheet
@@ -196,7 +196,7 @@ class TestL1CSVProcessing:
         query = (
             f"mimeType='application/vnd.google-apps.spreadsheet' "
             f"and name='entity-1' "
-            f"and '{test_drive_layout.l1_data_id}' in parents "
+            f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
         results = drive_service.files().list(
@@ -237,7 +237,7 @@ class TestL1ImageCopying:
         from tests.test_utils import create_test_entities_csv
 
         entities = {
-            "entity-1": {"generate": "Y", "slides": ""},
+            "entity-1": {"l1": "Y", "l2": "", "l3": "N"},
         }
 
         csv_file_id = create_test_entities_csv(
@@ -248,12 +248,12 @@ class TestL1ImageCopying:
         test_drive_layout.entities_csv_id = csv_file_id
 
         create_test_l0_data(
-            test_drive_layout.l0_data_id,
+            test_drive_layout.l0_raw_id,
             "entity-1",
             test_credentials,
         )
 
-        result = l1_generate(creds=test_credentials, layout=test_drive_layout)
+        result = generate(creds=test_credentials, layout=test_drive_layout)
         assert result["successful"] == ["entity-1"]
 
         # Verify image exists in L1
@@ -263,7 +263,7 @@ class TestL1ImageCopying:
         query = (
             f"mimeType='application/vnd.google-apps.folder' "
             f"and name='entity-1' "
-            f"and '{test_drive_layout.l1_data_id}' in parents "
+            f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
         results = drive_service.files().list(
@@ -306,9 +306,9 @@ class TestL1EntityFiltering:
         from tests.test_utils import create_test_entities_csv
 
         entities = {
-            "entity-1": {"generate": "Y", "slides": ""},
-            "entity-2": {"generate": "N", "slides": ""},
-            "entity-3": {"generate": "Y", "slides": ""},
+            "entity-1": {"l1": "Y", "l2": "", "l3": "N"},
+            "entity-2": {"l1": "N", "l2": "", "l3": "N"},
+            "entity-3": {"l1": "Y", "l2": "", "l3": "N"},
         }
 
         csv_file_id = create_test_entities_csv(
@@ -321,12 +321,12 @@ class TestL1EntityFiltering:
         # Create L0 data for all entities
         for entity_name in ["entity-1", "entity-2", "entity-3"]:
             create_test_l0_data(
-                test_drive_layout.l0_data_id,
+                test_drive_layout.l0_raw_id,
                 entity_name,
                 test_credentials,
             )
 
-        result = l1_generate(creds=test_credentials, layout=test_drive_layout)
+        result = generate(creds=test_credentials, layout=test_drive_layout)
 
         # Only entity-1 and entity-3 should be processed
         assert len(result["successful"]) == 2
@@ -339,7 +339,7 @@ class TestL1EntityFiltering:
         query = (
             f"mimeType='application/vnd.google-apps.folder' "
             f"and name='entity-2' "
-            f"and '{test_drive_layout.l1_data_id}' in parents "
+            f"and '{test_drive_layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
         results = drive_service.files().list(
@@ -365,7 +365,7 @@ class TestL1ErrorCases:
         from tests.test_utils import create_test_entities_csv
 
         entities = {
-            "entity-1": {"generate": "Y", "slides": ""},
+            "entity-1": {"l1": "Y", "l2": "", "l3": "N"},
         }
 
         csv_file_id = create_test_entities_csv(
@@ -380,7 +380,7 @@ class TestL1ErrorCases:
         file_metadata = {
             "name": "entity-1",
             "mimeType": "application/vnd.google-apps.folder",
-            "parents": [test_drive_layout.l0_data_id],
+            "parents": [test_drive_layout.l0_raw_id],
         }
         folder = drive_service.files().create(
             body=file_metadata,
@@ -389,7 +389,7 @@ class TestL1ErrorCases:
         ).execute()
 
         # Run L1 generate - should succeed but with warning
-        result = l1_generate(creds=test_credentials, layout=test_drive_layout)
+        result = generate(creds=test_credentials, layout=test_drive_layout)
 
         # Entity should still be processed (spreadsheet created, just no CSV data)
         assert "entity-1" in result["successful"]
@@ -403,7 +403,7 @@ class TestL1ErrorCases:
         from tests.test_utils import create_test_entities_csv
 
         entities = {
-            "entity-1": {"generate": "Y", "slides": ""},
+            "entity-1": {"l1": "Y", "l2": "", "l3": "N"},
         }
 
         csv_file_id = create_test_entities_csv(
@@ -417,13 +417,13 @@ class TestL1ErrorCases:
         test_drive_layout.data_template_id = "invalid-template-id-12345"
 
         create_test_l0_data(
-            test_drive_layout.l0_data_id,
+            test_drive_layout.l0_raw_id,
             "entity-1",
             test_credentials,
         )
 
         # Should fail
-        result = l1_generate(creds=test_credentials, layout=test_drive_layout)
+        result = generate(creds=test_credentials, layout=test_drive_layout)
         assert "entity-1" in result["failed"]
 
     def test_l1_special_characters(
@@ -436,7 +436,7 @@ class TestL1ErrorCases:
         from tests.test_utils import create_test_entities_csv
 
         entities = {
-            "entity-with-special-chars-!@#": {"generate": "Y", "slides": ""},
+            "entity-with-special-chars-!@#": {"l1": "Y", "l2": "", "l3": "N"},
         }
 
         csv_file_id = create_test_entities_csv(
@@ -447,12 +447,12 @@ class TestL1ErrorCases:
         test_drive_layout.entities_csv_id = csv_file_id
 
         create_test_l0_data(
-            test_drive_layout.l0_data_id,
+            test_drive_layout.l0_raw_id,
             "entity-with-special-chars-!@#",
             test_credentials,
         )
 
-        result = l1_generate(creds=test_credentials, layout=test_drive_layout)
+        result = generate(creds=test_credentials, layout=test_drive_layout)
 
         # Should handle special characters (may succeed or fail depending on Drive restrictions)
         # At minimum, should not crash

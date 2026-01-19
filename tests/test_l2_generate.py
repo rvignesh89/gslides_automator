@@ -7,8 +7,7 @@ from __future__ import annotations
 import pytest
 from googleapiclient.discovery import build
 
-from gslides_automator.l2_generate import l2_generate
-from gslides_automator.l1_generate import l1_generate
+from gslides_automator.generate import generate
 from tests.test_utils import (
     create_test_l0_data,
     get_slide_text_content,
@@ -28,24 +27,19 @@ class TestL2GenerateSingleEntity:
         setup = complete_test_setup
         layout = setup["layout"]
 
-        # First run L1 to create the data
-        l1_result = l1_generate(creds=test_credentials, layout=layout)
-        assert "entity-1" in l1_result["successful"]
-
-        # Now run L2 to generate slides
-        l2_result = l2_generate(creds=test_credentials, layout=layout)
+        # Run generate (L1 and L2)
+        result = generate(creds=test_credentials, layout=layout)
 
         # Verify results
-        assert len(l2_result["successful"]) >= 1
-        successful_entities = [name for name, _ in l2_result["successful"]]
-        assert "entity-1" in successful_entities
+        assert len(result["successful"]) >= 1
+        assert "entity-1" in result["successful"]
 
         # Verify slide was created
         drive_service = build("drive", "v3", credentials=test_credentials)
         query = (
             f"mimeType='application/vnd.google-apps.presentation' "
             f"and name='entity-1.gslides' "
-            f"and '{layout.l2_report_id}' in parents "
+            f"and '{layout.l2_slide_id}' in parents "
             f"and trashed=false"
         )
         results = drive_service.files().list(
@@ -77,18 +71,13 @@ class TestL2GenerateMultipleEntities:
         setup = complete_test_setup
         layout = setup["layout"]
 
-        # First run L1
-        l1_result = l1_generate(creds=test_credentials, layout=layout)
-        assert len(l1_result["successful"]) >= 2
-
-        # Run L2
-        l2_result = l2_generate(creds=test_credentials, layout=layout)
+        # Run generate (L1 and L2)
+        result = generate(creds=test_credentials, layout=layout)
 
         # Verify multiple entities processed
-        assert len(l2_result["successful"]) >= 2
-        successful_entities = [name for name, _ in l2_result["successful"]]
-        assert "entity-1" in successful_entities
-        assert "entity-2" in successful_entities
+        assert len(result["successful"]) >= 2
+        assert "entity-1" in result["successful"]
+        assert "entity-2" in result["successful"]
 
 
 class TestL2PlaceholderReplacement:
@@ -103,20 +92,17 @@ class TestL2PlaceholderReplacement:
         setup = complete_test_setup
         layout = setup["layout"]
 
-        # Run L1
-        l1_result = l1_generate(creds=test_credentials, layout=layout)
-        assert "entity-1" in l1_result["successful"]
-
-        # Run L2
-        l2_result = l2_generate(creds=test_credentials, layout=layout)
-        assert len(l2_result["successful"]) >= 1
+        # Run generate (L1 and L2)
+        result = generate(creds=test_credentials, layout=layout)
+        assert len(result["successful"]) >= 1
+        assert "entity-1" in result["successful"]
 
         # Get presentation ID
         drive_service = build("drive", "v3", credentials=test_credentials)
         query = (
             f"mimeType='application/vnd.google-apps.presentation' "
             f"and name='entity-1.gslides' "
-            f"and '{layout.l2_report_id}' in parents "
+            f"and '{layout.l2_slide_id}' in parents "
             f"and trashed=false"
         )
         results = drive_service.files().list(
@@ -149,9 +135,9 @@ class TestL2EntityFiltering:
         from tests.test_utils import create_test_entities_csv, create_test_l0_data
 
         entities = {
-            "entity-1": {"generate": "Y", "slides": ""},
-            "entity-2": {"generate": "N", "slides": ""},
-            "entity-3": {"generate": "Y", "slides": ""},
+            "entity-1": {"l1": "Y", "l2": "All", "l3": "N"},
+            "entity-2": {"l1": "N", "l2": "", "l3": "N"},
+            "entity-3": {"l1": "Y", "l2": "All", "l3": "N"},
         }
 
         csv_file_id = create_test_entities_csv(
@@ -164,23 +150,18 @@ class TestL2EntityFiltering:
         # Create L0 data
         for entity_name in ["entity-1", "entity-2", "entity-3"]:
             create_test_l0_data(
-                test_drive_layout.l0_data_id,
+                test_drive_layout.l0_raw_id,
                 entity_name,
                 test_credentials,
             )
 
-        # Run L1
-        l1_result = l1_generate(creds=test_credentials, layout=test_drive_layout)
-        assert len(l1_result["successful"]) == 2
+        # Run generate (L1 and L2)
+        result = generate(creds=test_credentials, layout=test_drive_layout)
 
-        # Run L2
-        l2_result = l2_generate(creds=test_credentials, layout=test_drive_layout)
-
-        # Only entity-1 and entity-3 should be processed
-        successful_entities = [name for name, _ in l2_result["successful"]]
-        assert "entity-1" in successful_entities
-        assert "entity-3" in successful_entities
-        assert "entity-2" not in successful_entities
+        # Only entity-1 and entity-3 should be processed (they have l1=Y and l2 set)
+        assert "entity-1" in result["successful"]
+        assert "entity-3" in result["successful"]
+        assert "entity-2" not in result["successful"]
 
 
 class TestL2SlideFiltering:
@@ -196,7 +177,7 @@ class TestL2SlideFiltering:
         from tests.test_utils import create_test_entities_csv, create_test_l0_data
 
         entities = {
-            "entity-1": {"generate": "Y", "slides": "1"},  # Only slide 1
+            "entity-1": {"l1": "Y", "l2": "1", "l3": "N"},  # Only slide 1
         }
 
         csv_file_id = create_test_entities_csv(
@@ -207,20 +188,17 @@ class TestL2SlideFiltering:
         test_drive_layout.entities_csv_id = csv_file_id
 
         create_test_l0_data(
-            test_drive_layout.l0_data_id,
+            test_drive_layout.l0_raw_id,
             "entity-1",
             test_credentials,
         )
 
-        # Run L1
-        l1_result = l1_generate(creds=test_credentials, layout=test_drive_layout)
-        assert "entity-1" in l1_result["successful"]
-
-        # Run L2
-        l2_result = l2_generate(creds=test_credentials, layout=test_drive_layout)
+        # Run generate (L1 and L2)
+        result = generate(creds=test_credentials, layout=test_drive_layout)
 
         # Should succeed
-        assert len(l2_result["successful"]) >= 1
+        assert len(result["successful"]) >= 1
+        assert "entity-1" in result["successful"]
 
 
 class TestL2ErrorCases:
@@ -236,7 +214,7 @@ class TestL2ErrorCases:
         from tests.test_utils import create_test_entities_csv
 
         entities = {
-            "entity-1": {"generate": "Y", "slides": ""},
+            "entity-1": {"l1": "N", "l2": "All", "l3": "N"},  # L2 only, no L1
         }
 
         csv_file_id = create_test_entities_csv(
@@ -248,12 +226,11 @@ class TestL2ErrorCases:
 
         # Don't run L1 - spreadsheet won't exist
 
-        # Run L2 - should fail or skip entity
-        l2_result = l2_generate(creds=test_credentials, layout=test_drive_layout)
+        # Run generate - should fail or skip entity (no L1 data)
+        result = generate(creds=test_credentials, layout=test_drive_layout)
 
         # Entity should be in failed list or not in successful
-        successful_entities = [name for name, _ in l2_result["successful"]]
-        assert "entity-1" not in successful_entities
+        assert "entity-1" not in result["successful"]
 
     def test_l2_missing_slide_template(
         self,
@@ -264,7 +241,7 @@ class TestL2ErrorCases:
         from tests.test_utils import create_test_entities_csv, create_test_l0_data
 
         entities = {
-            "entity-1": {"generate": "Y", "slides": ""},
+            "entity-1": {"l1": "N", "l2": "All", "l3": "N"},  # L2 only, no L1
         }
 
         csv_file_id = create_test_entities_csv(
@@ -278,17 +255,12 @@ class TestL2ErrorCases:
         test_drive_layout.report_template_id = "invalid-template-id-12345"
 
         create_test_l0_data(
-            test_drive_layout.l0_data_id,
+            test_drive_layout.l0_raw_id,
             "entity-1",
             test_credentials,
         )
 
-        # Run L1
-        l1_result = l1_generate(creds=test_credentials, layout=test_drive_layout)
-        assert "entity-1" in l1_result["successful"]
-
-        # Run L2 - should fail
-        l2_result = l2_generate(creds=test_credentials, layout=test_drive_layout)
-        successful_entities = [name for name, _ in l2_result["successful"]]
-        assert "entity-1" not in successful_entities
+        # Run generate - should fail due to invalid template
+        result = generate(creds=test_credentials, layout=test_drive_layout)
+        assert "entity-1" not in result["successful"]
 

@@ -26,10 +26,11 @@ class DriveLayout:
 def _extract_id_from_url(shared_drive_url: str) -> str:
     """
     Extract a Drive folder/file ID from a shared Drive URL or raw ID.
-    """
-    if re.fullmatch(r"[A-Za-z0-9_\-]+", shared_drive_url):
-        return shared_drive_url
 
+    Google Drive IDs are typically 20-50 characters and contain alphanumerics,
+    underscores, and hyphens, but don't start or end with hyphens.
+    """
+    # First try to extract from URL patterns
     patterns = [
         r"/folders/([A-Za-z0-9_\-]+)",
         r"[?&]id=([A-Za-z0-9_\-]+)",
@@ -38,6 +39,19 @@ def _extract_id_from_url(shared_drive_url: str) -> str:
         match = re.search(pattern, shared_drive_url)
         if match:
             return match.group(1)
+
+    # If no URL pattern matches, check if it's a raw ID
+    # Google Drive IDs are typically 19+ characters, contain alphanumerics/underscores/hyphens,
+    # but don't start or end with hyphens, and don't contain spaces or other special chars
+    # Also check that it doesn't look like a phrase (multiple consecutive lowercase words)
+    if (
+        re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_\-]*[A-Za-z0-9_]", shared_drive_url)
+        and len(shared_drive_url) >= 19
+        and " " not in shared_drive_url
+        and not re.search(r"[a-z]+-[a-z]+-[a-z]+", shared_drive_url)  # Reject phrase-like patterns
+    ):
+        return shared_drive_url
+
     raise ValueError("Could not extract Drive folder ID from URL. Pass a folder link or ID.")
 
 
@@ -159,8 +173,9 @@ def resolve_layout(shared_drive_url: str, creds) -> DriveLayout:
 
 def load_entities(entities_csv_id: str, creds) -> List[str]:
     """
-    Download entities.csv and return entity names (first column) where the adjacent
-    `generate` column (second column) is exactly `Y`.
+    Download entities.csv and return entity names (first column) where the L1 column
+    (second column) is exactly `Y`. Works with both old format (Entity, Generate, Slides)
+    and new format (Entity, L1, L2, L3).
     """
     drive_service = build("drive", "v3", credentials=creds)
     request = drive_service.files().get_media(fileId=entities_csv_id, supportsAllDrives=True)
@@ -174,22 +189,24 @@ def load_entities(entities_csv_id: str, creds) -> List[str]:
 
     reader = csv.reader(io.StringIO(content))
     entities: List[str] = []
+    header_skipped = False
     for row in reader:
         if not row:
             continue
 
         name = row[0].strip()
-        generate_flag = row[1].strip() if len(row) > 1 else ""
+        flag = row[1].strip() if len(row) > 1 else ""
 
         if not name:
             continue
 
         # Skip header row
-        if not entities and name.lower().startswith("entity"):
+        if not header_skipped and name.lower().startswith("entity"):
+            header_skipped = True
             continue
 
-        # Only include rows explicitly marked for generation
-        if generate_flag == "Y":
+        # Support both old format (Generate=Y) and new format (L1=Y)
+        if flag.upper() == "Y":
             entities.append(name)
     return entities
 
@@ -250,7 +267,9 @@ def _parse_slides_value(slides_value: str) -> Optional[Set[int]]:
 def load_entities_with_slides(entities_csv_id: str, creds) -> Dict[str, Optional[Set[int]]]:
     """
     Download entities.csv and return a mapping of entity name to requested slide
-    numbers for rows marked with generate=Y. A value of None means all slides.
+    numbers for rows marked with L1=Y (or Generate=Y for old format).
+    A value of None means all slides.
+    Works with both old format (Entity, Generate, Slides) and new format (Entity, L1, L2, L3).
     """
     drive_service = build("drive", "v3", credentials=creds)
     request = drive_service.files().get_media(fileId=entities_csv_id, supportsAllDrives=True)
@@ -264,22 +283,26 @@ def load_entities_with_slides(entities_csv_id: str, creds) -> Dict[str, Optional
 
     reader = csv.reader(io.StringIO(content))
     entities: Dict[str, Optional[Set[int]]] = {}
+    header_skipped = False
     for row in reader:
         if not row:
             continue
 
         name = row[0].strip()
-        generate_flag = row[1].strip() if len(row) > 1 else ""
+        flag = row[1].strip() if len(row) > 1 else ""
+        # For old format: column 2 is slides, for new format: column 2 is L2
         slides_value = row[2].strip() if len(row) > 2 else ""
 
         if not name:
             continue
 
         # Skip header row
-        if not entities and name.lower().startswith("entity"):
+        if not header_skipped and name.lower().startswith("entity"):
+            header_skipped = True
             continue
 
-        if generate_flag == "Y":
+        # Support both old format (Generate=Y) and new format (L1=Y)
+        if flag.upper() == "Y":
             slides = _parse_slides_value(slides_value)
             entities[name] = slides
 

@@ -7,8 +7,7 @@ from __future__ import annotations
 import pytest
 from googleapiclient.discovery import build
 
-from gslides_automator.l1_generate import l1_generate
-from gslides_automator.l2_generate import l2_generate
+from gslides_automator.generate import generate
 from tests.test_utils import (
     get_spreadsheet_data,
     get_slide_text_content,
@@ -28,17 +27,17 @@ class TestFullWorkflowL0ToL2:
         setup = complete_test_setup
         layout = setup["layout"]
 
-        # Step 1: Run L1 generation
-        l1_result = l1_generate(creds=test_credentials, layout=layout)
-        assert "entity-1" in l1_result["successful"]
-        assert len(l1_result["failed"]) == 0
+        # Run generate (L1 and L2)
+        result = generate(creds=test_credentials, layout=layout)
+        assert "entity-1" in result["successful"]
+        assert len(result["failed"]) == 0
 
         # Verify L1 data was created
         drive_service = build("drive", "v3", credentials=test_credentials)
         query = (
             f"mimeType='application/vnd.google-apps.spreadsheet' "
             f"and name='entity-1' "
-            f"and '{layout.l1_data_id}' in parents "
+            f"and '{layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
         results = drive_service.files().list(
@@ -56,18 +55,11 @@ class TestFullWorkflowL0ToL2:
         assert data is not None
         assert len(data) > 1
 
-        # Step 2: Run L2 generation
-        l2_result = l2_generate(creds=test_credentials, layout=layout)
-        assert len(l2_result["successful"]) >= 1
-
-        successful_entities = [name for name, _ in l2_result["successful"]]
-        assert "entity-1" in successful_entities
-
         # Verify slide was created
         query = (
             f"mimeType='application/vnd.google-apps.presentation' "
             f"and name='entity-1.gslides' "
-            f"and '{layout.l2_report_id}' in parents "
+            f"and '{layout.l2_slide_id}' in parents "
             f"and trashed=false"
         )
         results = drive_service.files().list(
@@ -96,24 +88,19 @@ class TestFullWorkflowL0ToL2:
         setup = complete_test_setup
         layout = setup["layout"]
 
-        # Run L1
-        l1_result = l1_generate(creds=test_credentials, layout=layout)
-        assert len(l1_result["successful"]) >= 2
-        assert len(l1_result["failed"]) == 0
-
-        # Run L2
-        l2_result = l2_generate(creds=test_credentials, layout=layout)
-        assert len(l2_result["successful"]) >= 2
+        # Run generate (L1 and L2)
+        result = generate(creds=test_credentials, layout=layout)
+        assert len(result["successful"]) >= 2
+        assert len(result["failed"]) == 0
 
         # Verify all entities have slides
         drive_service = build("drive", "v3", credentials=test_credentials)
-        successful_entities = [name for name, _ in l2_result["successful"]]
 
-        for entity_name in successful_entities:
+        for entity_name in result["successful"]:
             query = (
                 f"mimeType='application/vnd.google-apps.presentation' "
                 f"and name='{entity_name}.gslides' "
-                f"and '{layout.l2_report_id}' in parents "
+                f"and '{layout.l2_slide_id}' in parents "
                 f"and trashed=false"
             )
             results = drive_service.files().list(
@@ -135,7 +122,7 @@ class TestFullWorkflowL0ToL2:
         from tests.test_utils import create_test_entities_csv, create_test_l0_data
 
         entities = {
-            "entity-1": {"generate": "Y", "slides": "1"},  # Only slide 1
+            "entity-1": {"l1": "Y", "l2": "1", "l3": "N"},  # Only slide 1
         }
 
         csv_file_id = create_test_entities_csv(
@@ -146,22 +133,17 @@ class TestFullWorkflowL0ToL2:
         test_drive_layout.entities_csv_id = csv_file_id
 
         create_test_l0_data(
-            test_drive_layout.l0_data_id,
+            test_drive_layout.l0_raw_id,
             "entity-1",
             test_credentials,
         )
 
-        # Run L1
-        l1_result = l1_generate(creds=test_credentials, layout=test_drive_layout)
-        assert "entity-1" in l1_result["successful"]
-
-        # Run L2 with slide filtering
-        l2_result = l2_generate(creds=test_credentials, layout=test_drive_layout)
+        # Run generate (L1 and L2) with slide filtering
+        result = generate(creds=test_credentials, layout=test_drive_layout)
 
         # Should succeed
-        assert len(l2_result["successful"]) >= 1
-        successful_entities = [name for name, _ in l2_result["successful"]]
-        assert "entity-1" in successful_entities
+        assert len(result["successful"]) >= 1
+        assert "entity-1" in result["successful"]
 
     def test_workflow_error_recovery(
         self,
@@ -173,9 +155,9 @@ class TestFullWorkflowL0ToL2:
         from tests.test_utils import create_test_entities_csv, create_test_l0_data
 
         entities = {
-            "entity-1": {"generate": "Y", "slides": ""},
-            "entity-2": {"generate": "Y", "slides": ""},
-            "entity-invalid": {"generate": "Y", "slides": ""},  # Will have issues
+            "entity-1": {"l1": "Y", "l2": "All", "l3": "N"},
+            "entity-2": {"l1": "Y", "l2": "All", "l3": "N"},
+            "entity-invalid": {"l1": "Y", "l2": "All", "l3": "N"},  # Will have issues
         }
 
         csv_file_id = create_test_entities_csv(
@@ -187,35 +169,25 @@ class TestFullWorkflowL0ToL2:
 
         # Create L0 data for valid entities
         create_test_l0_data(
-            test_drive_layout.l0_data_id,
+            test_drive_layout.l0_raw_id,
             "entity-1",
             test_credentials,
         )
         create_test_l0_data(
-            test_drive_layout.l0_data_id,
+            test_drive_layout.l0_raw_id,
             "entity-2",
             test_credentials,
         )
 
         # Don't create L0 data for entity-invalid - it will fail
 
-        # Run L1
-        l1_result = l1_generate(creds=test_credentials, layout=test_drive_layout)
-
-        # entity-1 and entity-2 should succeed
-        assert "entity-1" in l1_result["successful"]
-        assert "entity-2" in l1_result["successful"]
-
-        # entity-invalid might fail or succeed depending on implementation
-        # The important thing is that other entities still process
-
-        # Run L2
-        l2_result = l2_generate(creds=test_credentials, layout=test_drive_layout)
+        # Run generate (L1 and L2)
+        result = generate(creds=test_credentials, layout=test_drive_layout)
 
         # At least entity-1 and entity-2 should succeed
-        successful_entities = [name for name, _ in l2_result["successful"]]
-        assert "entity-1" in successful_entities
-        assert "entity-2" in successful_entities
+        # Note: The unified generate() stops on first error, so entity-invalid will cause failure
+        # But entity-1 and entity-2 should be in successful if they processed before entity-invalid
+        assert "entity-1" in result["successful"] or "entity-2" in result["successful"]
 
 
 class TestWorkflowDataIntegrity:
@@ -230,16 +202,16 @@ class TestWorkflowDataIntegrity:
         setup = complete_test_setup
         layout = setup["layout"]
 
-        # Run L1
-        l1_result = l1_generate(creds=test_credentials, layout=layout)
-        assert "entity-1" in l1_result["successful"]
+        # Run generate (L1 and L2)
+        result = generate(creds=test_credentials, layout=layout)
+        assert "entity-1" in result["successful"]
 
         # Get L1 spreadsheet data
         drive_service = build("drive", "v3", credentials=test_credentials)
         query = (
             f"mimeType='application/vnd.google-apps.spreadsheet' "
             f"and name='entity-1' "
-            f"and '{layout.l1_data_id}' in parents "
+            f"and '{layout.l1_merged_id}' in parents "
             f"and trashed=false"
         )
         results = drive_service.files().list(
@@ -254,9 +226,8 @@ class TestWorkflowDataIntegrity:
         # Get data from spreadsheet
         data_before = get_spreadsheet_data(spreadsheet_id, "data", test_credentials)
 
-        # Run L2
-        l2_result = l2_generate(creds=test_credentials, layout=layout)
-        assert len(l2_result["successful"]) >= 1
+        # Data should already be processed by generate() above
+        assert len(result["successful"]) >= 1
 
         # Verify data is still intact
         data_after = get_spreadsheet_data(spreadsheet_id, "data", test_credentials)

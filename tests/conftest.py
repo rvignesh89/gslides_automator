@@ -128,13 +128,13 @@ def test_entities_data(test_drive_layout, test_credentials):
     Creates test entities.csv file with sample entities.
 
     Returns a tuple of (entities_dict, csv_file_id) where entities_dict maps
-    entity names to their generate and slides flags.
+    entity names to their L1, L2, and L3 flags.
     """
     entities = {
-        "entity-1": {"generate": "Y", "slides": ""},
-        "entity-2": {"generate": "Y", "slides": "1,2"},
-        "entity-3": {"generate": "N", "slides": ""},
-        "entity-4": {"generate": "Y", "slides": "1-3"},
+        "entity-1": {"l1": "Y", "l2": "All", "l3": "N"},
+        "entity-2": {"l1": "Y", "l2": "1,2", "l3": "Y"},
+        "entity-3": {"l1": "N", "l2": "", "l3": "N"},
+        "entity-4": {"l1": "Y", "l2": "1-3", "l3": "N"},
     }
 
     csv_file_id = create_test_entities_csv(
@@ -185,7 +185,7 @@ def test_l0_data(test_drive_layout, test_credentials):
 
     for entity_name in entities:
         folder_id = create_test_l0_data(
-            test_drive_layout.l0_data_id,
+            test_drive_layout.l0_raw_id,
             entity_name,
             test_credentials,
         )

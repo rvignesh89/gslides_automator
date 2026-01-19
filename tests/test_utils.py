@@ -32,9 +32,10 @@ def create_test_drive_structure(root_id: str, creds) -> DriveLayout:
     # Create required folders
     folders = {}
     folder_names = {
-        "l0_data": "L0-Data",
-        "l1_data": "L1-Data",
-        "l2_report": "L2-Reports",
+        "l0_raw": "L0-Raw",
+        "l1_merged": "L1-Merged",
+        "l2_slide": "L2-Slide",
+        "l3_pdf": "L3-PDF",
         "templates": "Templates",
     }
 
@@ -53,9 +54,10 @@ def create_test_drive_structure(root_id: str, creds) -> DriveLayout:
 
     return DriveLayout(
         root_id=root_id,
-        l0_data_id=folders["l0_data"],
-        l1_data_id=folders["l1_data"],
-        l2_report_id=folders["l2_report"],
+        l0_raw_id=folders["l0_raw"],
+        l1_merged_id=folders["l1_merged"],
+        l2_slide_id=folders["l2_slide"],
+        l3_pdf_id=folders["l3_pdf"],
         templates_id=folders["templates"],
         data_template_id="",  # Will be set when template is created
         report_template_id="",  # Will be set when template is created
@@ -74,7 +76,7 @@ def create_test_entities_csv(
     Args:
         root_id: ID of the root folder where entities.csv should be created
         entities: Dict mapping entity names to their flags:
-                  {"entity-1": {"generate": "Y", "slides": "1,2"}, ...}
+                  {"entity-1": {"l1": "Y", "l2": "1,2", "l3": "Y"}, ...}
         creds: Service account credentials
 
     Returns:
@@ -85,12 +87,13 @@ def create_test_entities_csv(
     # Create CSV content
     csv_content = io.StringIO()
     writer = csv.writer(csv_content)
-    writer.writerow(["Entity", "Generate", "Slides"])  # Header
+    writer.writerow(["Entity", "L1", "L2", "L3"])  # Header
 
     for entity_name, flags in entities.items():
-        generate = flags.get("generate", "N")
-        slides = flags.get("slides", "")
-        writer.writerow([entity_name, generate, slides])
+        l1 = flags.get("l1", "N")
+        l2 = flags.get("l2", "")
+        l3 = flags.get("l3", "N")
+        writer.writerow([entity_name, l1, l2, l3])
 
     csv_content.seek(0)
     csv_bytes = csv_content.read().encode("utf-8")
@@ -158,8 +161,8 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
         common_data_sheet = spreadsheet.worksheet("common_data")
 
     # Add headers and sample data to common_data
-    common_data_sheet.update("A1:E1", [["entity_name", "brand_name", "year", "region", "status"]])
-    common_data_sheet.update("A2:E2", [["entity-1", "TestBrand", "2024", "North", "Active"]])
+    common_data_sheet.update(range_name="A1:E1", values=[["entity_name", "brand_name", "year", "region", "status"]])
+    common_data_sheet.update(range_name="A2:E2", values=[["entity-1", "TestBrand", "2024", "North", "Active"]])
 
     # Create data sheet for text placeholders
     try:
@@ -168,8 +171,8 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
         data_sheet = spreadsheet.worksheet("data")
 
     # Add sample placeholder data
-    data_sheet.update("A1:B1", [["placeholder", "value"]])
-    data_sheet.update("A2:B5", [
+    data_sheet.update(range_name="A1:B1", values=[["placeholder", "value"]])
+    data_sheet.update(range_name="A2:B5", values=[
         ["brand_name_", "TestBrand"],
         ["year_", "2024"],
         ["region_", "North"],
@@ -182,8 +185,8 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
     except Exception:
         chart_sheet = spreadsheet.worksheet("chart-sales")
 
-    chart_sheet.update("A1:C1", [["Month", "Sales", "Target"]])
-    chart_sheet.update("A2:C5", [
+    chart_sheet.update(range_name="A1:C1", values=[["Month", "Sales", "Target"]])
+    chart_sheet.update(range_name="A2:C5", values=[
         ["Jan", "1000", "1200"],
         ["Feb", "1200", "1200"],
         ["Mar", "1500", "1300"],
@@ -196,8 +199,8 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
     except Exception:
         table_sheet = spreadsheet.worksheet("table-performance")
 
-    table_sheet.update("A1:D1", [["Metric", "Q1", "Q2", "Q3"]])
-    table_sheet.update("A2:D4", [
+    table_sheet.update(range_name="A1:D1", values=[["Metric", "Q1", "Q2", "Q3"]])
+    table_sheet.update(range_name="A2:D4", values=[
         ["Revenue", "10000", "12000", "15000"],
         ["Profit", "2000", "2500", "3000"],
         ["Growth", "10%", "15%", "20%"],
@@ -245,21 +248,6 @@ def create_test_slide_template(templates_folder_id: str, creds) -> str:
     presentation_id = presentation_file.get("id")
 
     # Now use Slides API to add content to the presentation
-    # First, update the title
-    slides_service.presentations().batchUpdate(
-        presentationId=presentation_id,
-        body={
-            "requests": [{
-                "updatePresentationProperties": {
-                    "presentationProperties": {
-                        "title": "report-template.gslide"
-                    },
-                    "fields": "title"
-                }
-            }]
-        }
-    ).execute()
-
     # Get the presentation to check for slides
     presentation = slides_service.presentations().get(
         presentationId=presentation_id,
@@ -516,9 +504,10 @@ def verify_drive_structure(layout: DriveLayout, creds) -> bool:
     drive_service = build("drive", "v3", credentials=creds)
 
     required_folders = {
-        "L0-Data": layout.l0_data_id,
-        "L1-Data": layout.l1_data_id,
-        "L2-Reports": layout.l2_report_id,
+        "L0-Raw": layout.l0_raw_id,
+        "L1-Merged": layout.l1_merged_id,
+        "L2-Slide": layout.l2_slide_id,
+        "L3-PDF": layout.l3_pdf_id,
         "Templates": layout.templates_id,
     }
 

@@ -14,7 +14,11 @@ from gslides_automator.drive_layout import (
     load_entities_with_slides,
     _extract_id_from_url,
 )
-from tests.test_utils import create_test_entities_csv
+from tests.test_utils import (
+    create_test_entities_csv,
+    create_test_data_template,
+    create_test_slide_template,
+)
 
 
 class TestExtractIdFromUrl:
@@ -46,13 +50,23 @@ class TestResolveLayout:
 
     def test_resolve_layout_success(self, test_drive_layout, test_credentials):
         """Test successful layout resolution."""
+        # Create required files that resolve_layout expects
+        create_test_data_template(test_drive_layout.templates_id, test_credentials)
+        create_test_slide_template(test_drive_layout.templates_id, test_credentials)
+        create_test_entities_csv(
+            test_drive_layout.root_id,
+            {"entity-1": {"l1": "Y", "l2": "", "l3": "N"}},
+            test_credentials,
+        )
+
         layout = resolve_layout(test_drive_layout.root_id, test_credentials)
 
         assert isinstance(layout, DriveLayout)
         assert layout.root_id == test_drive_layout.root_id
-        assert layout.l0_data_id == test_drive_layout.l0_data_id
-        assert layout.l1_data_id == test_drive_layout.l1_data_id
-        assert layout.l2_report_id == test_drive_layout.l2_report_id
+        assert layout.l0_raw_id == test_drive_layout.l0_raw_id
+        assert layout.l1_merged_id == test_drive_layout.l1_merged_id
+        assert layout.l2_slide_id == test_drive_layout.l2_slide_id
+        assert layout.l3_pdf_id == test_drive_layout.l3_pdf_id
         assert layout.templates_id == test_drive_layout.templates_id
 
     def test_resolve_layout_missing_folders(self, test_credentials):
@@ -94,9 +108,9 @@ class TestLoadEntities:
     def test_load_entities_success(self, test_drive_layout, test_credentials):
         """Test loading entities with generate=Y."""
         entities = {
-            "entity-1": {"generate": "Y", "slides": ""},
-            "entity-2": {"generate": "Y", "slides": ""},
-            "entity-3": {"generate": "N", "slides": ""},
+            "entity-1": {"l1": "Y", "l2": "", "l3": "N"},
+            "entity-2": {"l1": "Y", "l2": "", "l3": "N"},
+            "entity-3": {"l1": "N", "l2": "", "l3": "N"},
         }
 
         csv_file_id = create_test_entities_csv(
@@ -115,8 +129,8 @@ class TestLoadEntities:
     def test_load_entities_empty(self, test_drive_layout, test_credentials):
         """Test loading entities when none are marked for generation."""
         entities = {
-            "entity-1": {"generate": "N", "slides": ""},
-            "entity-2": {"generate": "N", "slides": ""},
+            "entity-1": {"l1": "N", "l2": "", "l3": "N"},
+            "entity-2": {"l1": "N", "l2": "", "l3": "N"},
         }
 
         csv_file_id = create_test_entities_csv(
@@ -131,8 +145,8 @@ class TestLoadEntities:
     def test_load_entities_with_header(self, test_drive_layout, test_credentials):
         """Test that header row is properly skipped."""
         entities = {
-            "Entity": {"generate": "Generate", "slides": "Slides"},  # Header row
-            "entity-1": {"generate": "Y", "slides": ""},
+            "Entity": {"l1": "L1", "l2": "L2", "l3": "L3"},  # Header row
+            "entity-1": {"l1": "Y", "l2": "", "l3": "N"},
         }
 
         csv_file_id = create_test_entities_csv(
@@ -152,8 +166,8 @@ class TestLoadEntitiesWithSlides:
     def test_load_entities_with_slides_all(self, test_drive_layout, test_credentials):
         """Test loading entities with slides=None (all slides)."""
         entities = {
-            "entity-1": {"generate": "Y", "slides": ""},
-            "entity-2": {"generate": "Y", "slides": ""},
+            "entity-1": {"l1": "Y", "l2": "All", "l3": "N"},
+            "entity-2": {"l1": "Y", "l2": "All", "l3": "N"},
         }
 
         csv_file_id = create_test_entities_csv(
@@ -171,8 +185,8 @@ class TestLoadEntitiesWithSlides:
     def test_load_entities_with_slides_specific(self, test_drive_layout, test_credentials):
         """Test loading entities with specific slide numbers."""
         entities = {
-            "entity-1": {"generate": "Y", "slides": "1,2,3"},
-            "entity-2": {"generate": "Y", "slides": "2-4"},
+            "entity-1": {"l1": "Y", "l2": "1,2,3", "l3": "N"},
+            "entity-2": {"l1": "Y", "l2": "2-4", "l3": "N"},
         }
 
         csv_file_id = create_test_entities_csv(
@@ -190,7 +204,7 @@ class TestLoadEntitiesWithSlides:
     def test_load_entities_with_slides_range(self, test_drive_layout, test_credentials):
         """Test loading entities with slide range."""
         entities = {
-            "entity-1": {"generate": "Y", "slides": "1-3"},
+            "entity-1": {"l1": "Y", "l2": "1-3", "l3": "N"},
         }
 
         csv_file_id = create_test_entities_csv(
@@ -206,7 +220,7 @@ class TestLoadEntitiesWithSlides:
     def test_load_entities_with_slides_mixed(self, test_drive_layout, test_credentials):
         """Test loading entities with mixed slide specification."""
         entities = {
-            "entity-1": {"generate": "Y", "slides": "1,3,5-7"},
+            "entity-1": {"l1": "Y", "l2": "1,3,5-7", "l3": "N"},
         }
 
         csv_file_id = create_test_entities_csv(
