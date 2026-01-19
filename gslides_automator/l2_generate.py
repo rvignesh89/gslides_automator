@@ -360,10 +360,18 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
             for file in files:
                 # First check if file is accessible
                 try:
+
                     def _check_file_access():
-                        return drive_service.files().get(
-                            fileId=file["id"], fields="id, name", supportsAllDrives=True
-                        ).execute()
+                        return (
+                            drive_service.files()
+                            .get(
+                                fileId=file["id"],
+                                fields="id, name",
+                                supportsAllDrives=True,
+                            )
+                            .execute()
+                        )
+
                     retry_with_exponential_backoff(_check_file_access)
                 except HttpError as check_error:
                     if check_error.resp.status == 404:
@@ -496,10 +504,14 @@ def find_existing_presentation(entity_name, output_folder_id, creds):
             file_id = files[0]["id"]
             # Verify file is accessible
             try:
+
                 def _verify_file_access():
-                    return drive_service.files().get(
-                        fileId=file_id, fields="id, name", supportsAllDrives=True
-                    ).execute()
+                    return (
+                        drive_service.files()
+                        .get(fileId=file_id, fields="id, name", supportsAllDrives=True)
+                        .execute()
+                    )
+
                 retry_with_exponential_backoff(_verify_file_access)
                 return file_id
             except HttpError as check_error:
@@ -555,10 +567,16 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
     try:
         # Get template and target presentations
         def _get_template():
-            return slides_service.presentations().get(presentationId=template_id).execute()
+            return (
+                slides_service.presentations().get(presentationId=template_id).execute()
+            )
 
         def _get_target():
-            return slides_service.presentations().get(presentationId=presentation_id).execute()
+            return (
+                slides_service.presentations()
+                .get(presentationId=presentation_id)
+                .execute()
+            )
 
         template_presentation = retry_with_exponential_backoff(_get_template)
         template_slides = template_presentation.get("slides", [])
@@ -626,10 +644,17 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                 delete_requests.append({"deleteObject": {"objectId": target_slide_id}})
 
         if delete_requests:
+
             def _delete_slides():
-                return slides_service.presentations().batchUpdate(
-                    presentationId=presentation_id, body={"requests": delete_requests}
-                ).execute()
+                return (
+                    slides_service.presentations()
+                    .batchUpdate(
+                        presentationId=presentation_id,
+                        body={"requests": delete_requests},
+                    )
+                    .execute()
+                )
+
             retry_with_exponential_backoff(_delete_slides)
 
         # Now create new slides and copy elements from template
@@ -658,6 +683,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                     )
                     .execute()
                 )
+
             create_result = retry_with_exponential_backoff(_create_slide)
 
             new_slide_id = create_result["replies"][0]["createSlide"]["objectId"]
@@ -1449,10 +1475,17 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                     batch_size = 50
                     for i in range(0, len(copy_requests), batch_size):
                         batch = copy_requests[i : i + batch_size]
+
                         def _copy_batch():
-                            return slides_service.presentations().batchUpdate(
-                                presentationId=presentation_id, body={"requests": batch}
-                            ).execute()
+                            return (
+                                slides_service.presentations()
+                                .batchUpdate(
+                                    presentationId=presentation_id,
+                                    body={"requests": batch},
+                                )
+                                .execute()
+                            )
+
                         retry_with_exponential_backoff(_copy_batch)
 
         print(f"  ✓ Replaced {len(slide_numbers)} slide(s) from template")
@@ -1483,6 +1516,7 @@ def copy_template_presentation(spreadsheet_name, template_id, output_folder_id, 
 
     # Copy the template
     print("Copying template presentation...")
+
     def _copy_file():
         return (
             drive_service.files()
@@ -1503,6 +1537,7 @@ def copy_template_presentation(spreadsheet_name, template_id, output_folder_id, 
 
     # Move to output folder
     print("Moving presentation to output folder...")
+
     def _get_file_metadata():
         return (
             drive_service.files()
@@ -1514,21 +1549,29 @@ def copy_template_presentation(spreadsheet_name, template_id, output_folder_id, 
     previous_parents = ",".join(file_metadata.get("parents", []))
 
     def _update_file_with_parents():
-        return drive_service.files().update(
-            fileId=new_presentation_id,
-            addParents=output_folder_id,
-            removeParents=previous_parents,
-            fields="id, parents",
-            supportsAllDrives=True,
-        ).execute()
+        return (
+            drive_service.files()
+            .update(
+                fileId=new_presentation_id,
+                addParents=output_folder_id,
+                removeParents=previous_parents,
+                fields="id, parents",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
 
     def _update_file_add_only():
-        return drive_service.files().update(
-            fileId=new_presentation_id,
-            addParents=output_folder_id,
-            fields="id, parents",
-            supportsAllDrives=True,
-        ).execute()
+        return (
+            drive_service.files()
+            .update(
+                fileId=new_presentation_id,
+                addParents=output_folder_id,
+                fields="id, parents",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
 
     if previous_parents:
         retry_with_exponential_backoff(_update_file_with_parents)
@@ -1556,7 +1599,12 @@ def get_chart_id_from_sheet(spreadsheet_id, sheet_name, creds):
     try:
         # Get the spreadsheet to find charts
         def _get_spreadsheet():
-            return sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+            return (
+                sheets_service.spreadsheets()
+                .get(spreadsheetId=spreadsheet_id)
+                .execute()
+            )
+
         spreadsheet = retry_with_exponential_backoff(_get_spreadsheet)
 
         # Find the sheet and get its charts
@@ -1618,6 +1666,7 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
             query = f"'{entity_folder_id}' in parents and name='{image_filename}' and trashed=false and ({mime_query})"
 
             try:
+
                 def _list_files():
                     return (
                         drive_service.files()
@@ -1630,6 +1679,7 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
                         )
                         .execute()
                     )
+
                 results = retry_with_exponential_backoff(_list_files)
 
                 files = results.get("files", [])
@@ -1645,6 +1695,7 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
         query = f"'{entity_folder_id}' in parents and name contains '{expected_filename_base}' and trashed=false and ({mime_query})"
 
         try:
+
             def _list_files_flexible():
                 return (
                     drive_service.files()
@@ -1657,6 +1708,7 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
                     )
                     .execute()
                 )
+
             results = retry_with_exponential_backoff(_list_files_flexible)
 
             files = results.get("files", [])
@@ -1710,7 +1762,10 @@ def replace_textbox_with_chart(
 
     # Get the slide to find the z-order index of the textbox
     def _get_presentation_for_chart():
-        return slides_service.presentations().get(presentationId=presentation_id).execute()
+        return (
+            slides_service.presentations().get(presentationId=presentation_id).execute()
+        )
+
     presentation = retry_with_exponential_backoff(_get_presentation_for_chart)
     presentation_slides = presentation.get("slides", [])
 
@@ -1787,6 +1842,7 @@ def replace_textbox_with_chart(
     # Get the sheet ID for the chart
     def _get_spreadsheet_for_chart():
         return sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+
     spreadsheet = retry_with_exponential_backoff(_get_spreadsheet_for_chart)
     sheet_id = None
 
@@ -1869,7 +1925,10 @@ def replace_textbox_with_chart(
                         .get(presentationId=presentation_id)
                         .execute()
                     )
-                updated_presentation = retry_with_exponential_backoff(_get_updated_presentation_chart_zorder)
+
+                updated_presentation = retry_with_exponential_backoff(
+                    _get_updated_presentation_chart_zorder
+                )
                 updated_slides = updated_presentation.get("slides", [])
 
                 for s in updated_slides:
@@ -1960,7 +2019,10 @@ def replace_textbox_with_image(
 
     # Get the slide to find the z-order index of the textbox
     def _get_presentation_for_image_replace():
-        return slides_service.presentations().get(presentationId=presentation_id).execute()
+        return (
+            slides_service.presentations().get(presentationId=presentation_id).execute()
+        )
+
     presentation = retry_with_exponential_backoff(_get_presentation_for_image_replace)
     presentation_slides = presentation.get("slides", [])
 
@@ -2079,12 +2141,16 @@ def replace_textbox_with_image(
             if not has_public_access:
                 try:
                     permission = {"type": "anyone", "role": "reader"}
+
                     def _create_permission():
                         return (
                             drive_service.permissions()
-                            .create(fileId=file_id, body=permission, supportsAllDrives=True)
+                            .create(
+                                fileId=file_id, body=permission, supportsAllDrives=True
+                            )
                             .execute()
                         )
+
                     result = retry_with_exponential_backoff(_create_permission)
                     permission_id = result.get("id")
                     had_public_permission = True
@@ -2098,6 +2164,7 @@ def replace_textbox_with_image(
                     )
                     # Try to get webContentLink - this might work if file is already shared
                     try:
+
                         def _get_file_metadata():
                             return (
                                 drive_service.files()
@@ -2108,7 +2175,10 @@ def replace_textbox_with_image(
                                 )
                                 .execute()
                             )
-                        file_metadata = retry_with_exponential_backoff(_get_file_metadata)
+
+                        file_metadata = retry_with_exponential_backoff(
+                            _get_file_metadata
+                        )
 
                         web_content_link = file_metadata.get("webContentLink")
                         if web_content_link:
@@ -2131,9 +2201,12 @@ def replace_textbox_with_image(
             def _get_file_metadata_public():
                 return (
                     drive_service.files()
-                    .get(fileId=file_id, fields="webContentLink", supportsAllDrives=True)
+                    .get(
+                        fileId=file_id, fields="webContentLink", supportsAllDrives=True
+                    )
                     .execute()
                 )
+
             file_metadata = retry_with_exponential_backoff(_get_file_metadata_public)
 
             web_content_link = file_metadata.get("webContentLink")
@@ -2283,12 +2356,18 @@ def replace_textbox_with_image(
         # Always revoke the temporary public permission, whether insertion succeeded or failed
         if had_public_permission and permission_id and not is_url:
             try:
+
                 def _revoke_permission():
-                    return drive_service.permissions().delete(
-                        fileId=image_url_or_file_id,
-                        permissionId=permission_id,
-                        supportsAllDrives=True,
-                    ).execute()
+                    return (
+                        drive_service.permissions()
+                        .delete(
+                            fileId=image_url_or_file_id,
+                            permissionId=permission_id,
+                            supportsAllDrives=True,
+                        )
+                        .execute()
+                    )
+
                 retry_with_exponential_backoff(_revoke_permission)
                 print("    ℹ️  Revoked temporary public access from image file")
             except HttpError as revoke_error:
@@ -2688,11 +2767,17 @@ def populate_table_with_data(
     batch_size = 50
     try:
         for i in range(0, len(requests), batch_size):
+
             def _batch_update_table():
-                return slides_service.presentations().batchUpdate(
-                    presentationId=presentation_id,
-                    body={"requests": requests[i : i + batch_size]},
-                ).execute()
+                return (
+                    slides_service.presentations()
+                    .batchUpdate(
+                        presentationId=presentation_id,
+                        body={"requests": requests[i : i + batch_size]},
+                    )
+                    .execute()
+                )
+
             retry_with_exponential_backoff(_batch_update_table)
         print(f"  ✓ Populated table on slide {slide_number}")
         return True
@@ -2732,7 +2817,12 @@ def process_all_slides(
     try:
         # Get the presentation
         def _get_presentation_process():
-            return slides_service.presentations().get(presentationId=presentation_id).execute()
+            return (
+                slides_service.presentations()
+                .get(presentationId=presentation_id)
+                .execute()
+            )
+
         presentation = retry_with_exponential_backoff(_get_presentation_process)
         presentation_slides = presentation.get("slides", [])
 

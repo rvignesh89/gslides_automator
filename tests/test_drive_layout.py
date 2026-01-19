@@ -80,8 +80,7 @@ class TestResolveLayout:
             "mimeType": "application/vnd.google-apps.folder",
         }
         folder = execute_with_retry(
-            drive_service.files()
-            .create(
+            drive_service.files().create(
                 body=file_metadata,
                 fields="id",
                 supportsAllDrives=True,

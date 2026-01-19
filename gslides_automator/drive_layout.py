@@ -165,8 +165,7 @@ def _find_child_by_name(
             f"'{parent_id}' in parents and name='{name}' and trashed=false{mime_clause}"
         )
         result = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=query,
                 fields="files(id,name,mimeType)",
                 supportsAllDrives=True,
@@ -206,8 +205,7 @@ def _find_or_create_folder(
             "parents": [parent_id],
         }
         folder = execute_with_retry(
-            drive_service.files()
-            .create(
+            drive_service.files().create(
                 body=file_metadata,
                 fields="id",
                 supportsAllDrives=True,
@@ -285,7 +283,7 @@ def load_entities(entities_csv_id: str, creds) -> List[str]:
     request = drive_service.files().get_media(
         fileId=entities_csv_id, supportsAllDrives=True
     )
-    
+
     def _download():
         buffer = io.BytesIO()
         downloader = MediaIoBaseDownload(buffer, request)
@@ -294,7 +292,7 @@ def load_entities(entities_csv_id: str, creds) -> List[str]:
             status, done = downloader.next_chunk()
         buffer.seek(0)
         return buffer.read().decode("utf-8")
-    
+
     content = retry_with_exponential_backoff(_download)
 
     reader = csv.reader(io.StringIO(content))
@@ -388,7 +386,7 @@ def load_entities_with_slides(
     request = drive_service.files().get_media(
         fileId=entities_csv_id, supportsAllDrives=True
     )
-    
+
     def _download():
         buffer = io.BytesIO()
         downloader = MediaIoBaseDownload(buffer, request)
@@ -397,7 +395,7 @@ def load_entities_with_slides(
             status, done = downloader.next_chunk()
         buffer.seek(0)
         return buffer.read().decode("utf-8")
-    
+
     content = retry_with_exponential_backoff(_download)
 
     reader = csv.reader(io.StringIO(content))
@@ -461,7 +459,7 @@ def load_entities_with_flags(entities_csv_id: str, creds) -> List[EntityFlags]:
     request = drive_service.files().get_media(
         fileId=entities_csv_id, supportsAllDrives=True
     )
-    
+
     def _download():
         buffer = io.BytesIO()
         downloader = MediaIoBaseDownload(buffer, request)
@@ -470,7 +468,7 @@ def load_entities_with_flags(entities_csv_id: str, creds) -> List[EntityFlags]:
             status, done = downloader.next_chunk()
         buffer.seek(0)
         return buffer.read().decode("utf-8")
-    
+
     content = retry_with_exponential_backoff(_download)
 
     reader = csv.reader(io.StringIO(content))

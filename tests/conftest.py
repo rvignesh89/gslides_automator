@@ -77,8 +77,7 @@ def test_drive_root(test_credentials):
     # Verify parent folder exists and is accessible
     try:
         parent_folder = execute_with_retry(
-            drive_service.files()
-            .get(
+            drive_service.files().get(
                 fileId=parent_id,
                 fields="id, name, mimeType",
                 supportsAllDrives=True,
@@ -99,8 +98,7 @@ def test_drive_root(test_credentials):
     }
 
     folder = execute_with_retry(
-        drive_service.files()
-        .create(
+        drive_service.files().create(
             body=file_metadata,
             fields="id",
             supportsAllDrives=True,

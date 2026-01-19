@@ -60,8 +60,7 @@ class TestFullWorkflow:
             f"and trashed=false"
         )
         results = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=query,
                 fields="files(id)",
                 supportsAllDrives=True,
@@ -80,8 +79,7 @@ class TestFullWorkflow:
             f"and trashed=false"
         )
         results = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=query,
                 fields="files(id)",
                 supportsAllDrives=True,
@@ -105,8 +103,7 @@ class TestFullWorkflow:
             f"and trashed=false"
         )
         results = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=query,
                 fields="files(id)",
                 supportsAllDrives=True,
@@ -132,8 +129,7 @@ class TestFullWorkflow:
             f"and trashed=false"
         )
         results = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=query,
                 fields="files(id)",
                 supportsAllDrives=True,
@@ -305,8 +301,7 @@ class TestWorkflowDataIntegrity:
             f"and trashed=false"
         )
         results = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=query,
                 fields="files(id)",
                 supportsAllDrives=True,
@@ -325,8 +320,7 @@ class TestWorkflowDataIntegrity:
             f"and trashed=false"
         )
         results = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=query,
                 fields="files(id)",
                 supportsAllDrives=True,
@@ -355,8 +349,7 @@ class TestWorkflowDataIntegrity:
             f"and trashed=false"
         )
         results = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=query,
                 fields="files(id)",
                 supportsAllDrives=True,

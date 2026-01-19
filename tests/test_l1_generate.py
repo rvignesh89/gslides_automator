@@ -63,8 +63,7 @@ class TestL1GenerateSingleEntity:
             f"and trashed=false"
         )
         results = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=query,
                 fields="files(id, name)",
                 supportsAllDrives=True,
@@ -85,8 +84,7 @@ class TestL1GenerateSingleEntity:
             f"and trashed=false"
         )
         results = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=query,
                 fields="files(id, name)",
                 supportsAllDrives=True,
@@ -110,8 +108,7 @@ class TestL1GenerateSingleEntity:
             f"and trashed=false"
         )
         results = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=query,
                 fields="files(id, name)",
                 supportsAllDrives=True,
@@ -208,8 +205,7 @@ class TestL1CSVProcessing:
             f"and trashed=false"
         )
         results = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=query,
                 fields="files(id)",
                 supportsAllDrives=True,
@@ -282,8 +278,7 @@ class TestL1ImageCopying:
             f"and trashed=false"
         )
         results = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=query,
                 fields="files(id)",
                 supportsAllDrives=True,
@@ -300,8 +295,7 @@ class TestL1ImageCopying:
             f"and trashed=false"
         )
         results = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=query,
                 fields="files(id, name)",
                 supportsAllDrives=True,
@@ -364,8 +358,7 @@ class TestL1EntityFiltering:
             f"and trashed=false"
         )
         results = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=query,
                 fields="files(id)",
                 supportsAllDrives=True,

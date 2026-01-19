@@ -135,8 +135,7 @@ def create_test_drive_structure(root_id: str, creds) -> DriveLayout:
             "parents": [root_id],
         }
         folder = execute_with_retry(
-            drive_service.files()
-            .create(
+            drive_service.files().create(
                 body=file_metadata,
                 fields="id",
                 supportsAllDrives=True,
@@ -203,8 +202,7 @@ def create_test_entities_csv(
     )
 
     file = execute_with_retry(
-        drive_service.files()
-        .create(
+        drive_service.files().create(
             body=file_metadata,
             media_body=media,
             fields="id",
@@ -237,8 +235,7 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
     }
 
     spreadsheet_file = execute_with_retry(
-        drive_service.files()
-        .create(
+        drive_service.files().create(
             body=file_metadata,
             fields="id",
             supportsAllDrives=True,
@@ -355,8 +352,7 @@ def create_test_slide_template(templates_folder_id: str, creds) -> str:
 
     # Create empty presentation file in the folder
     presentation_file = execute_with_retry(
-        drive_service.files()
-        .create(
+        drive_service.files().create(
             body=file_metadata,
             fields="id",
             supportsAllDrives=True,
@@ -507,8 +503,7 @@ def create_test_l0_data(
     }
 
     folder = execute_with_retry(
-        drive_service.files()
-        .create(
+        drive_service.files().create(
             body=file_metadata,
             fields="id",
             supportsAllDrives=True,
@@ -612,8 +607,7 @@ def cleanup_test_drive(root_id: str, creds) -> None:
     try:
         # List all files in the root folder
         results = execute_with_retry(
-            drive_service.files()
-            .list(
+            drive_service.files().list(
                 q=f"'{root_id}' in parents and trashed=false",
                 fields="files(id, name, mimeType)",
                 supportsAllDrives=True,
@@ -666,8 +660,7 @@ def verify_drive_structure(layout: DriveLayout, creds) -> bool:
     for folder_name, folder_id in required_folders.items():
         try:
             folder = execute_with_retry(
-                drive_service.files()
-                .get(
+                drive_service.files().get(
                     fileId=folder_id,
                     fields="id, name, mimeType",
                     supportsAllDrives=True,
