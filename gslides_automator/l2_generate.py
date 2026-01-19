@@ -343,7 +343,7 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
             for file in files:
                 # First check if file is accessible
                 try:
-                    file_check = drive_service.files().get(
+                    drive_service.files().get(
                         fileId=file['id'],
                         fields='id, name',
                         supportsAllDrives=True
@@ -442,7 +442,7 @@ def find_existing_presentation(entity_name, output_folder_id, creds):
             file_id = files[0]['id']
             # Verify file is accessible
             try:
-                file_check = drive_service.files().get(
+                drive_service.files().get(
                     fileId=file_id,
                     fields='id, name',
                     supportsAllDrives=True
@@ -2003,7 +2003,7 @@ def replace_multiple_placeholders_in_textbox(presentation_id, slide_number, text
         ).execute()
 
     try:
-        response = retry_with_exponential_backoff(execute_batch_update)
+        retry_with_exponential_backoff(execute_batch_update)
         replaced_count = len(placeholder_positions)
         print(f"  ✓ Replaced {replaced_count} placeholder(s) in slide {slide_number}")
         return True

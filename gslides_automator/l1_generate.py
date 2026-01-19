@@ -470,8 +470,7 @@ def write_csv_to_sheet_tab(gspread_client, spreadsheet_id, tab_name, csv_data, c
         # Get the worksheet ID
         spreadsheet = gspread_client.open_by_key(spreadsheet_id)
         try:
-            worksheet = spreadsheet.worksheet(tab_name)
-            sheet_id = worksheet.id
+            spreadsheet.worksheet(tab_name)
         except gspread.exceptions.WorksheetNotFound:
             print(f"    ⚠️  Tab '{tab_name}' not found in spreadsheet")
             return False
@@ -495,7 +494,7 @@ def write_csv_to_sheet_tab(gspread_client, spreadsheet_id, tab_name, csv_data, c
             'values': values
         }
 
-        result = sheets_service.spreadsheets().values().update(
+        sheets_service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
             range=range_name,
             valueInputOption='RAW',  # RAW preserves exact values without interpretation
