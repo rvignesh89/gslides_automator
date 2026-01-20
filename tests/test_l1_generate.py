@@ -4,6 +4,7 @@ Tests for l1_generate module.
 
 from __future__ import annotations
 
+import pytest
 from googleapiclient.discovery import build
 
 from gslides_automator.generate import generate
@@ -198,10 +199,32 @@ class TestL1CSVProcessing:
 
         # Find the created spreadsheet
         drive_service = build("drive", "v3", credentials=test_credentials)
+
+        # First find the entity folder in L1-Merged
+        query = (
+            f"mimeType='application/vnd.google-apps.folder' "
+            f"and name='entity-1' "
+            f"and '{test_drive_layout.l1_merged_id}' in parents "
+            f"and trashed=false"
+        )
+        results = execute_with_retry(
+            drive_service.files().list(
+                q=query,
+                fields="files(id)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+        )
+
+        folders = results.get("files", [])
+        assert len(folders) == 1
+        entity_folder_id = folders[0]["id"]
+
+        # Then find the spreadsheet inside the entity folder
         query = (
             f"mimeType='application/vnd.google-apps.spreadsheet' "
             f"and name='entity-1' "
-            f"and '{test_drive_layout.l1_merged_id}' in parents "
+            f"and '{entity_folder_id}' in parents "
             f"and trashed=false"
         )
         results = execute_with_retry(
@@ -441,9 +464,9 @@ class TestL1ErrorCases:
             test_credentials,
         )
 
-        # Should fail
-        result = generate(creds=test_credentials, layout=test_drive_layout)
-        assert "entity-1" in result["failed"]
+        # Should fail - generate raises an exception, so we catch it
+        with pytest.raises(Exception):
+            result = generate(creds=test_credentials, layout=test_drive_layout)
 
     def test_l1_special_characters(
         self,

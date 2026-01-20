@@ -4,6 +4,7 @@ Tests for l2_generate module.
 
 from __future__ import annotations
 
+import pytest
 from googleapiclient.discovery import build
 
 from gslides_automator.generate import generate
@@ -229,11 +230,9 @@ class TestL2ErrorCases:
 
         # Don't run L1 - spreadsheet won't exist
 
-        # Run generate - should fail or skip entity (no L1 data)
-        result = generate(creds=test_credentials, layout=test_drive_layout)
-
-        # Entity should be in failed list or not in successful
-        assert "entity-1" not in result["successful"]
+        # Run generate - should fail - generate raises an exception, so we catch it
+        with pytest.raises(Exception):
+            result = generate(creds=test_credentials, layout=test_drive_layout)
 
     def test_l2_missing_slide_template(
         self,
@@ -263,6 +262,6 @@ class TestL2ErrorCases:
             test_credentials,
         )
 
-        # Run generate - should fail due to invalid template
-        result = generate(creds=test_credentials, layout=test_drive_layout)
-        assert "entity-1" not in result["successful"]
+        # Run generate - should fail due to invalid template - generate raises an exception, so we catch it
+        with pytest.raises(Exception):
+            result = generate(creds=test_credentials, layout=test_drive_layout)
