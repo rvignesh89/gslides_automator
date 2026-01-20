@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gslides_automator"
-version = "0.4.1"
+version = "0.5.0"
 description = "Generate data and reports from Google Sheets and Drive"
 readme = "README.md"
 requires-python = ">=3.11"
