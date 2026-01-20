@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """
 Script to dynamically generate Google Slides presentations from Google Sheets.
 Processes multiple entity spreadsheets from a Google Drive folder.
@@ -7,35 +6,28 @@ For each spreadsheet, reads sheets named <type>-<placeholder> (chart/table/pictu
 copies a template presentation, and replaces placeholders with linked assets from the sheets.
 """
 
+from __future__ import annotations
 import gspread
 import os
 import sys
 import re
 import time
-import json
-import argparse
 from typing import Optional, Set
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from google.auth.transport.requests import Request
 
-_TABLE_SLIDE_PROCEED_DECISION: Optional[bool] = None  # Session-level choice for table slide regeneration
+_TABLE_SLIDE_PROCEED_DECISION: Optional[bool] = (
+    None  # Session-level choice for table slide regeneration
+)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
-try:
-    from gslides_automator.auth import get_oauth_credentials
-    from gslides_automator.drive_layout import (
-        DriveLayout,
-        load_entities_with_slides,
-        resolve_layout,
-    )
-except ImportError:  # Fallback for package-relative execution
-    from .auth import get_oauth_credentials
-    from .drive_layout import DriveLayout, load_entities_with_slides, resolve_layout
 
-def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_delay=60, backoff_factor=2):
+
+def retry_with_exponential_backoff(
+    func, max_retries=5, initial_delay=1, max_delay=60, backoff_factor=2
+):
     """
     Retry a function with exponential backoff on 429 (Too Many Requests) and 5xx (Server) errors.
 
@@ -71,7 +63,9 @@ def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_del
                         error_msg = "Rate limit exceeded (429)"
                     else:
                         error_msg = f"Server error ({status})"
-                    print(f"  ⚠️  {error_msg}. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})")
+                    print(
+                        f"  ⚠️  {error_msg}. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})"
+                    )
                     time.sleep(wait_time)
                     delay *= backoff_factor
                 else:
@@ -84,9 +78,10 @@ def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_del
             else:
                 # For non-retryable errors, re-raise immediately
                 raise
-        except Exception as e:
+        except Exception:
             # For non-HttpError exceptions, re-raise immediately
             raise
+
 
 def list_entity_folders(parent_folder_id, creds):
     """
@@ -99,31 +94,36 @@ def list_entity_folders(parent_folder_id, creds):
     Returns:
         list: List of tuples (folder_id, folder_name)
     """
-    drive_service = build('drive', 'v3', credentials=creds)
+    drive_service = build("drive", "v3", credentials=creds)
     folders = []
 
     try:
         # Query for folders in the parent folder
         query = f"mimeType='application/vnd.google-apps.folder' and '{parent_folder_id}' in parents and trashed=false"
 
-        results = drive_service.files().list(
-            q=query,
-            fields='files(id, name)',
-            pageSize=1000,
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id, name)",
+                pageSize=1000,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
-        items = results.get('files', [])
+        items = results.get("files", [])
 
         for item in items:
-            folders.append((item['id'], item['name']))
+            folders.append((item["id"], item["name"]))
 
         return folders
 
     except HttpError as error:
         print(f"Error listing entity folders: {error}")
         return []
+
 
 def list_spreadsheets_in_folder(folder_id, creds):
     """
@@ -136,31 +136,36 @@ def list_spreadsheets_in_folder(folder_id, creds):
     Returns:
         list: List of tuples (spreadsheet_id, spreadsheet_name)
     """
-    drive_service = build('drive', 'v3', credentials=creds)
+    drive_service = build("drive", "v3", credentials=creds)
     spreadsheets = []
 
     try:
         # Query for Google Sheets files in the folder
         query = f"mimeType='application/vnd.google-apps.spreadsheet' and '{folder_id}' in parents and trashed=false"
 
-        results = drive_service.files().list(
-            q=query,
-            fields='files(id, name)',
-            pageSize=1000,
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True
-        ).execute()
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id, name)",
+                pageSize=1000,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
 
-        items = results.get('files', [])
+        items = results.get("files", [])
 
         for item in items:
-            spreadsheets.append((item['id'], item['name']))
+            spreadsheets.append((item["id"], item["name"]))
 
         return spreadsheets
 
     except HttpError as error:
         print(f"Error listing spreadsheets in folder: {error}")
         return []
+
 
 def parse_sheet_name(sheet_name):
     """
@@ -172,13 +177,14 @@ def parse_sheet_name(sheet_name):
     Returns:
         tuple: (placeholder_type, placeholder_name) or None if pattern doesn't match
     """
-    pattern = r'^(chart|table|picture)-(.+)$'
+    pattern = r"^(chart|table|picture)-(.+)$"
     match = re.match(pattern, sheet_name)
     if match:
         placeholder_type = match.group(1)
         placeholder_name = match.group(2)
         return placeholder_type, placeholder_name
     return None
+
 
 def get_entity_name_from_common_data(spreadsheet_id, creds):
     """
@@ -200,7 +206,7 @@ def get_entity_name_from_common_data(spreadsheet_id, creds):
 
         # Find the 'common_data' sheet
         try:
-            common_data_sheet = spreadsheet.worksheet('common_data')
+            common_data_sheet = spreadsheet.worksheet("common_data")
         except gspread.exceptions.WorksheetNotFound:
             print("Error: 'common_data' sheet not found in spreadsheet")
             return None
@@ -216,7 +222,7 @@ def get_entity_name_from_common_data(spreadsheet_id, creds):
         # Find the 'entity_name' column index from header row (row 1, index 0)
         header_row = all_values[0]
         try:
-            entity_name_col_index = header_row.index('entity_name')
+            entity_name_col_index = header_row.index("entity_name")
         except ValueError:
             print("Error: 'entity_name' column not found in 'common_data' sheet")
             return None
@@ -237,6 +243,7 @@ def get_entity_name_from_common_data(spreadsheet_id, creds):
     except Exception as e:
         print(f"Error reading entity_name from 'common_data' sheet: {e}")
         return None
+
 
 def read_data_from_sheet(spreadsheet_id, sheet_name, creds):
     """
@@ -290,6 +297,7 @@ def read_data_from_sheet(spreadsheet_id, sheet_name, creds):
         print(f"Error reading data from sheet '{sheet_name}': {e}")
         return None
 
+
 def read_table_from_sheet(spreadsheet_id, sheet_name, creds):
     """
     Read 2D table data from a sheet. Returns a list of rows (list of strings).
@@ -311,6 +319,7 @@ def read_table_from_sheet(spreadsheet_id, sheet_name, creds):
         print(f"  ⚠️  Error reading table data from sheet '{sheet_name}': {e}")
         return None
 
+
 def delete_existing_presentation(entity_name, output_folder_id, creds):
     """
     Delete an existing presentation for a entity if it exists in the output folder.
@@ -323,7 +332,7 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
     Returns:
         bool: True if a presentation was found and deleted, False otherwise
     """
-    drive_service = build('drive', 'v3', credentials=creds)
+    drive_service = build("drive", "v3", credentials=creds)
 
     try:
         # Search for existing presentation with the expected name
@@ -331,75 +340,119 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
         query = f"'{output_folder_id}' in parents and name='{expected_filename}' and mimeType='application/vnd.google-apps.presentation' and trashed=false"
 
         def list_files():
-            return drive_service.files().list(
-                q=query,
-                fields='files(id, name)',
-                pageSize=10,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True
-            ).execute()
+            return (
+                drive_service.files()
+                .list(
+                    q=query,
+                    fields="files(id, name)",
+                    pageSize=10,
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                )
+                .execute()
+            )
 
         results = retry_with_exponential_backoff(list_files)
 
-        files = results.get('files', [])
+        files = results.get("files", [])
         if files:
             # Delete all matching files (should typically be just one)
             for file in files:
                 # First check if file is accessible
                 try:
-                    file_check = drive_service.files().get(
-                        fileId=file['id'],
-                        fields='id, name',
-                        supportsAllDrives=True
-                    ).execute()
+
+                    def _check_file_access():
+                        return (
+                            drive_service.files()
+                            .get(
+                                fileId=file["id"],
+                                fields="id, name",
+                                supportsAllDrives=True,
+                            )
+                            .execute()
+                        )
+
+                    retry_with_exponential_backoff(_check_file_access)
                 except HttpError as check_error:
                     if check_error.resp.status == 404:
                         try:
                             from .auth import get_service_account_email
+
                             service_account_email = get_service_account_email()
-                            print(f"  ⚠️  Presentation '{file['name']}' not accessible to service account.")
+                            print(
+                                f"  ⚠️  Presentation '{file['name']}' not accessible to service account."
+                            )
                             print(f"    Service account email: {service_account_email}")
-                            print(f"    Please ensure the file is shared with this service account with 'Editor' permissions.")
+                            print(
+                                "    Please ensure the file is shared with this service account with 'Editor' permissions."
+                            )
                         except Exception:
-                            print(f"  ⚠️  Presentation '{file['name']}' not accessible to service account.")
-                            print(f"    Please ensure the file is shared with your service account with 'Editor' permissions.")
+                            print(
+                                f"  ⚠️  Presentation '{file['name']}' not accessible to service account."
+                            )
+                            print(
+                                "    Please ensure the file is shared with your service account with 'Editor' permissions."
+                            )
                         continue
                     else:
                         print(f"  ⚠️  Error checking presentation access: {check_error}")
                         continue
 
                 def delete_file():
-                    return drive_service.files().delete(
-                        fileId=file['id'],
-                        supportsAllDrives=True
-                    ).execute()
+                    return (
+                        drive_service.files()
+                        .delete(fileId=file["id"], supportsAllDrives=True)
+                        .execute()
+                    )
 
                 try:
                     retry_with_exponential_backoff(delete_file)
-                    print(f"  ✓ Deleted existing presentation: {file['name']} (ID: {file['id']})")
+                    print(
+                        f"  ✓ Deleted existing presentation: {file['name']} (ID: {file['id']})"
+                    )
                 except HttpError as error:
                     if error.resp.status == 404:
                         try:
                             from .auth import get_service_account_email
+
                             service_account_email = get_service_account_email()
-                            print(f"  ⚠️  Error deleting presentation '{file['name']}': File not found or not accessible.")
+                            print(
+                                f"  ⚠️  Error deleting presentation '{file['name']}': File not found or not accessible."
+                            )
                             print(f"    Service account email: {service_account_email}")
-                            print(f"    Please ensure the file is shared with this service account with 'Editor' permissions.")
+                            print(
+                                "    Please ensure the file is shared with this service account with 'Editor' permissions."
+                            )
                         except Exception:
-                            print(f"  ⚠️  Error deleting presentation '{file['name']}': File not found or not accessible.")
-                            print(f"    Please ensure the file is shared with your service account with 'Editor' permissions.")
+                            print(
+                                f"  ⚠️  Error deleting presentation '{file['name']}': File not found or not accessible."
+                            )
+                            print(
+                                "    Please ensure the file is shared with your service account with 'Editor' permissions."
+                            )
                     elif error.resp.status == 403:
                         try:
                             from .auth import get_service_account_email
+
                             service_account_email = get_service_account_email()
-                            print(f"  ⚠️  Error deleting presentation '{file['name']}': Permission denied.")
+                            print(
+                                f"  ⚠️  Error deleting presentation '{file['name']}': Permission denied."
+                            )
                             print(f"    Service account email: {service_account_email}")
-                            print(f"    Please ensure the file is shared with this service account with 'Editor' permissions.")
+                            print(
+                                "    Please ensure the file is shared with this service account with 'Editor' permissions."
+                            )
                         except Exception:
-                            print(f"  ⚠️  Error deleting presentation '{file['name']}': Permission denied.")
-                            print(f"    Please ensure the file is shared with your service account with 'Editor' permissions.")
+                            print(
+                                f"  ⚠️  Error deleting presentation '{file['name']}': Permission denied."
+                            )
+                            print(
+                                "    Please ensure the file is shared with your service account with 'Editor' permissions."
+                            )
                     else:
-                        print(f"  ⚠️  Error deleting existing presentation {file['name']}: {error}")
+                        print(
+                            f"  ⚠️  Error deleting existing presentation {file['name']}: {error}"
+                        )
                     return False
             return True
         else:
@@ -409,6 +462,7 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
     except HttpError as error:
         print(f"  ⚠️  Error searching for existing presentation: {error}")
         return False
+
 
 def find_existing_presentation(entity_name, output_folder_id, creds):
     """
@@ -422,7 +476,7 @@ def find_existing_presentation(entity_name, output_folder_id, creds):
     Returns:
         str: Presentation ID if found, None otherwise
     """
-    drive_service = build('drive', 'v3', credentials=creds)
+    drive_service = build("drive", "v3", credentials=creds)
 
     try:
         # Search for existing presentation with the expected name
@@ -430,40 +484,56 @@ def find_existing_presentation(entity_name, output_folder_id, creds):
         query = f"'{output_folder_id}' in parents and name='{expected_filename}' and mimeType='application/vnd.google-apps.presentation' and trashed=false"
 
         def list_files():
-            return drive_service.files().list(
-                q=query,
-                fields='files(id, name)',
-                pageSize=10,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True
-            ).execute()
+            return (
+                drive_service.files()
+                .list(
+                    q=query,
+                    fields="files(id, name)",
+                    pageSize=10,
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                )
+                .execute()
+            )
 
         results = retry_with_exponential_backoff(list_files)
 
-        files = results.get('files', [])
+        files = results.get("files", [])
         if files:
             # Return the first matching file ID
-            file_id = files[0]['id']
+            file_id = files[0]["id"]
             # Verify file is accessible
             try:
-                file_check = drive_service.files().get(
-                    fileId=file_id,
-                    fields='id, name',
-                    supportsAllDrives=True
-                ).execute()
+
+                def _verify_file_access():
+                    return (
+                        drive_service.files()
+                        .get(fileId=file_id, fields="id, name", supportsAllDrives=True)
+                        .execute()
+                    )
+
+                retry_with_exponential_backoff(_verify_file_access)
                 return file_id
             except HttpError as check_error:
                 if check_error.resp.status == 404:
                     try:
                         from .auth import get_service_account_email
-                        from .auth import get_service_account_email
+
                         service_account_email = get_service_account_email()
-                        print(f"  ⚠️  Presentation '{files[0]['name']}' not accessible to service account.")
+                        print(
+                            f"  ⚠️  Presentation '{files[0]['name']}' not accessible to service account."
+                        )
                         print(f"    Service account email: {service_account_email}")
-                        print(f"    Please ensure the file is shared with this service account with 'Editor' permissions.")
+                        print(
+                            "    Please ensure the file is shared with this service account with 'Editor' permissions."
+                        )
                     except Exception:
-                        print(f"  ⚠️  Presentation '{files[0]['name']}' not accessible to service account.")
-                        print(f"    Please ensure the file is shared with your service account with 'Editor' permissions.")
+                        print(
+                            f"  ⚠️  Presentation '{files[0]['name']}' not accessible to service account."
+                        )
+                        print(
+                            "    Please ensure the file is shared with your service account with 'Editor' permissions."
+                        )
                 else:
                     print(f"  ⚠️  Error checking presentation access: {check_error}")
                 return None
@@ -473,6 +543,7 @@ def find_existing_presentation(entity_name, output_folder_id, creds):
     except HttpError as error:
         print(f"  ⚠️  Error searching for existing presentation: {error}")
         return None
+
 
 def replace_slides_from_template(presentation_id, template_id, slide_numbers, creds):
     """
@@ -491,23 +562,35 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
     import copy
     import uuid
 
-    slides_service = build('slides', 'v1', credentials=creds)
+    slides_service = build("slides", "v1", credentials=creds)
 
     try:
         # Get template and target presentations
-        template_presentation = slides_service.presentations().get(presentationId=template_id).execute()
-        template_slides = template_presentation.get('slides', [])
+        def _get_template():
+            return (
+                slides_service.presentations().get(presentationId=template_id).execute()
+            )
 
-        target_presentation = slides_service.presentations().get(presentationId=presentation_id).execute()
-        target_slides = target_presentation.get('slides', [])
+        def _get_target():
+            return (
+                slides_service.presentations()
+                .get(presentationId=presentation_id)
+                .execute()
+            )
+
+        template_presentation = retry_with_exponential_backoff(_get_template)
+        template_slides = template_presentation.get("slides", [])
+
+        target_presentation = retry_with_exponential_backoff(_get_target)
+        target_slides = target_presentation.get("slides", [])
 
         if not template_slides or not target_slides:
-            print(f"  ⚠️  Template or target presentation has no slides.")
+            print("  ⚠️  Template or target presentation has no slides.")
             return False
 
         max_slide = max(slide_numbers)
         if len(template_slides) < max_slide or len(target_slides) < max_slide:
-            print(f"  ⚠️  Template or target has fewer slides than requested.")
+            print("  ⚠️  Template or target has fewer slides than requested.")
             return False
 
         # Tables cannot be safely recreated slide-by-slide because formatting would be lost.
@@ -516,46 +599,63 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
         for slide_number in slide_numbers:
             slide_index = slide_number - 1
             target_slide = target_slides[slide_index]
-            if any('table' in element for element in target_slide.get('pageElements', [])):
+            if any(
+                "table" in element for element in target_slide.get("pageElements", [])
+            ):
                 table_slides.append(slide_number)
 
         # If any such slides, warn user and prompt for confirmation on first occurrence.
         # On subsequent calls in the same session, reuse the stored decision (still warn but do not re-prompt).
         if table_slides:
             global _TABLE_SLIDE_PROCEED_DECISION
-            slide_list = ', '.join(str(s) for s in sorted(table_slides))
+            slide_list = ", ".join(str(s) for s in sorted(table_slides))
             print(f"⚠️  Slide(s) {slide_list} contain table elements.")
-            print("  Per-slide regeneration is not supported for slides with tables, as tables cannot be recreated with proper formatting via the API.")
-            print("  You may lose table formatting or experience unexpected behavior if you choose to proceed.")
+            print(
+                "  Per-slide regeneration is not supported for slides with tables, as tables cannot be recreated with proper formatting via the API."
+            )
+            print(
+                "  You may lose table formatting or experience unexpected behavior if you choose to proceed."
+            )
             if _TABLE_SLIDE_PROCEED_DECISION is None:
                 proceed = None
                 while proceed not in ("y", "yes", "n", "no"):
-                    proceed = input("Do you wish to continue anyway? (y/N): ").strip().lower() or "n"
+                    proceed = (
+                        input("Do you wish to continue anyway? (y/N): ").strip().lower()
+                        or "n"
+                    )
                 _TABLE_SLIDE_PROCEED_DECISION = proceed in ("y", "yes")
-                print("  Your choice will be remembered for all future entities in this session.")
+                print(
+                    "  Your choice will be remembered for all future entities in this session."
+                )
             elif not _TABLE_SLIDE_PROCEED_DECISION:
                 print("✗ Cancelling processing as per stored user preference.")
                 return False
             else:
-                print("  Proceeding automatically based on stored preference to continue despite tables.")
+                print(
+                    "  Proceeding automatically based on stored preference to continue despite tables."
+                )
 
         # Delete target slides first (in reverse order to maintain indices)
         delete_requests = []
         for slide_number in sorted(slide_numbers, reverse=True):
             slide_index = slide_number - 1
-            target_slide_id = target_slides[slide_index].get('objectId')
+            target_slide_id = target_slides[slide_index].get("objectId")
             if target_slide_id:
-                delete_requests.append({
-                    'deleteObject': {
-                        'objectId': target_slide_id
-                    }
-                })
+                delete_requests.append({"deleteObject": {"objectId": target_slide_id}})
 
         if delete_requests:
-            slides_service.presentations().batchUpdate(
-                presentationId=presentation_id,
-                body={'requests': delete_requests}
-            ).execute()
+
+            def _delete_slides():
+                return (
+                    slides_service.presentations()
+                    .batchUpdate(
+                        presentationId=presentation_id,
+                        body={"requests": delete_requests},
+                    )
+                    .execute()
+                )
+
+            retry_with_exponential_backoff(_delete_slides)
 
         # Now create new slides and copy elements from template
         for slide_number in sorted(slide_numbers):
@@ -563,43 +663,57 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
             template_slide = template_slides[slide_index]
 
             # Create new blank slide
-            create_result = slides_service.presentations().batchUpdate(
-                presentationId=presentation_id,
-                body={'requests': [{
-                    'createSlide': {
-                        'insertionIndex': slide_index,
-                        'slideLayoutReference': {
-                            'predefinedLayout': 'BLANK'
-                        }
-                    }
-                }]}
-            ).execute()
+            def _create_slide():
+                return (
+                    slides_service.presentations()
+                    .batchUpdate(
+                        presentationId=presentation_id,
+                        body={
+                            "requests": [
+                                {
+                                    "createSlide": {
+                                        "insertionIndex": slide_index,
+                                        "slideLayoutReference": {
+                                            "predefinedLayout": "BLANK"
+                                        },
+                                    }
+                                }
+                            ]
+                        },
+                    )
+                    .execute()
+                )
 
-            new_slide_id = create_result['replies'][0]['createSlide']['objectId']
+            create_result = retry_with_exponential_backoff(_create_slide)
+
+            new_slide_id = create_result["replies"][0]["createSlide"]["objectId"]
 
             # Copy page elements from template slide
-            template_elements = template_slide.get('pageElements', [])
+            template_elements = template_slide.get("pageElements", [])
             if template_elements:
                 copy_requests = []
                 for element in template_elements:
-                    if 'shape' in element:
-                        shape = element.get('shape', {})
-                        shape_type = shape.get('shapeType', 'TEXT_BOX')
-                        transform = element.get('transform', {})
-                        size = element.get('size', {})
+                    if "shape" in element:
+                        shape = element.get("shape", {})
+                        shape_type = shape.get("shapeType", "TEXT_BOX")
+                        transform = element.get("transform", {})
+                        size = element.get("size", {})
 
-                        new_element_id = str(uuid.uuid4()).replace('-', '')[:26]
+                        new_element_id = str(uuid.uuid4()).replace("-", "")[:26]
 
                         # Get shape properties to preserve formatting - copy all writable properties
                         shape_properties = {}
-                        if 'shapeProperties' in shape:
+                        if "shapeProperties" in shape:
                             # Copy all shapeProperties from template, but filter to only writable top-level fields
-                            all_props = copy.deepcopy(shape.get('shapeProperties', {}))
+                            all_props = copy.deepcopy(shape.get("shapeProperties", {}))
                             # List of writable top-level fields in shapeProperties (excluding read-only and nested fields)
                             # Note: solidFill, gradientFill, etc. are nested under shapeBackgroundFill, not top-level
                             writable_top_level_fields = [
-                                'outline', 'shadow', 'link', 'contentAlignment',
-                                'shapeBackgroundFill'  # This contains nested fill properties
+                                "outline",
+                                "shadow",
+                                "link",
+                                "contentAlignment",
+                                "shapeBackgroundFill",  # This contains nested fill properties
                             ]
                             # Only include writable top-level fields
                             for field in writable_top_level_fields:
@@ -609,22 +723,32 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                         # contentAlignment can be directly on the shape object (not in shapeProperties)
                         # When reading from template, it might be on the shape itself
                         # We need to include it in shapeProperties for the update request
-                        if 'contentAlignment' in shape and 'contentAlignment' not in shape_properties:
-                            shape_properties['contentAlignment'] = shape.get('contentAlignment')
+                        if (
+                            "contentAlignment" in shape
+                            and "contentAlignment" not in shape_properties
+                        ):
+                            shape_properties["contentAlignment"] = shape.get(
+                                "contentAlignment"
+                            )
 
                         # Also check for contentAlignment at element level (if not already found)
-                        if 'contentAlignment' in element and 'contentAlignment' not in shape_properties:
-                            shape_properties['contentAlignment'] = element.get('contentAlignment')
+                        if (
+                            "contentAlignment" in element
+                            and "contentAlignment" not in shape_properties
+                        ):
+                            shape_properties["contentAlignment"] = element.get(
+                                "contentAlignment"
+                            )
 
                         create_shape_request = {
-                            'createShape': {
-                                'objectId': new_element_id,
-                                'shapeType': shape_type,
-                                'elementProperties': {
-                                    'pageObjectId': new_slide_id,
-                                    'size': size,
-                                    'transform': transform
-                                }
+                            "createShape": {
+                                "objectId": new_element_id,
+                                "shapeType": shape_type,
+                                "elementProperties": {
+                                    "pageObjectId": new_slide_id,
+                                    "size": size,
+                                    "transform": transform,
+                                },
                             }
                         }
 
@@ -632,29 +756,37 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
 
                         # Update shape properties to preserve formatting
                         if shape_properties:
-                            copy_requests.append({
-                                'updateShapeProperties': {
-                                    'objectId': new_element_id,
-                                    'shapeProperties': shape_properties,
-                                    'fields': ','.join(shape_properties.keys())
+                            copy_requests.append(
+                                {
+                                    "updateShapeProperties": {
+                                        "objectId": new_element_id,
+                                        "shapeProperties": shape_properties,
+                                        "fields": ",".join(shape_properties.keys()),
+                                    }
                                 }
-                            })
+                            )
 
                         # Copy text content with formatting if present
-                        if 'text' in shape:
-                            text_obj = shape.get('text', {})
-                            text_elements = text_obj.get('textElements', [])
+                        if "text" in shape:
+                            text_obj = shape.get("text", {})
+                            text_elements = text_obj.get("textElements", [])
 
                             # Get default paragraph style if present
                             default_paragraph_style = None
-                            if 'paragraphStyle' in text_obj:
-                                default_paragraph_style = text_obj['paragraphStyle']
+                            if "paragraphStyle" in text_obj:
+                                default_paragraph_style = text_obj["paragraphStyle"]
 
                             # Whitelist of writable text style fields
                             writable_text_style_fields = [
-                                'bold', 'italic', 'underline', 'strikethrough',
-                                'fontFamily', 'fontSize', 'foregroundColor', 'backgroundColor',
-                                'weightedFontFamily'  # Font weight (object with fontFamily and weight)
+                                "bold",
+                                "italic",
+                                "underline",
+                                "strikethrough",
+                                "fontFamily",
+                                "fontSize",
+                                "foregroundColor",
+                                "backgroundColor",
+                                "weightedFontFamily",  # Font weight (object with fontFamily and weight)
                             ]
 
                             # Helper function to filter text style to only writable fields
@@ -670,8 +802,15 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
 
                             # Whitelist of writable paragraph style fields
                             writable_paragraph_fields = [
-                                'alignment', 'direction', 'spacingMode', 'spaceAbove', 'spaceBelow',
-                                'lineSpacing', 'indentFirstLine', 'indentStart', 'indentEnd'
+                                "alignment",
+                                "direction",
+                                "spacingMode",
+                                "spaceAbove",
+                                "spaceBelow",
+                                "lineSpacing",
+                                "indentFirstLine",
+                                "indentStart",
+                                "indentEnd",
                             ]
 
                             # Helper function to filter paragraph style to only writable fields
@@ -690,208 +829,284 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                             collected_paragraph_markers = []  # Array of {endIndex, style} - will be converted to paragraphStyles later
 
                             for te in text_elements:
-                                if 'textRun' in te:
-                                    text_run = te['textRun']
-                                    content = text_run.get('content', '')
-                                    style = text_run.get('style', {})
+                                if "textRun" in te:
+                                    text_run = te["textRun"]
+                                    content = text_run.get("content", "")
+                                    style = text_run.get("style", {})
 
                                     # Get startIndex and endIndex from the element
-                                    start_index = te.get('startIndex', 0)
-                                    end_index = te.get('endIndex', start_index + len(content) if content else start_index)
+                                    start_index = te.get("startIndex", 0)
+                                    end_index = te.get(
+                                        "endIndex",
+                                        start_index + len(content)
+                                        if content
+                                        else start_index,
+                                    )
 
                                     if content:
-                                        collected_text_runs.append({
-                                            'startIndex': start_index,
-                                            'endIndex': end_index,
-                                            'content': content,
-                                            'style': style
-                                        })
+                                        collected_text_runs.append(
+                                            {
+                                                "startIndex": start_index,
+                                                "endIndex": end_index,
+                                                "content": content,
+                                                "style": style,
+                                            }
+                                        )
 
-                                elif 'paragraphMarker' in te:
-                                    para_marker = te['paragraphMarker']
-                                    para_style = para_marker.get('style', {}) if 'style' in para_marker else None
+                                elif "paragraphMarker" in te:
+                                    para_marker = te["paragraphMarker"]
+                                    para_style = (
+                                        para_marker.get("style", {})
+                                        if "style" in para_marker
+                                        else None
+                                    )
 
                                     # Use paragraph-specific style if available, otherwise use default
-                                    paragraph_style = para_style if para_style else default_paragraph_style
+                                    paragraph_style = (
+                                        para_style
+                                        if para_style
+                                        else default_paragraph_style
+                                    )
 
                                     if paragraph_style:
                                         # Get endIndex from the element (marks end of paragraph)
-                                        end_index = te.get('endIndex', 0)
+                                        end_index = te.get("endIndex", 0)
 
-                                        collected_paragraph_markers.append({
-                                            'endIndex': end_index,
-                                            'style': paragraph_style
-                                        })
+                                        collected_paragraph_markers.append(
+                                            {
+                                                "endIndex": end_index,
+                                                "style": paragraph_style,
+                                            }
+                                        )
 
                             # Convert paragraphMarkers to paragraphStyles with startIndex/endIndex
                             # Sort by endIndex to process in order
-                            collected_paragraph_markers.sort(key=lambda x: x['endIndex'])
+                            collected_paragraph_markers.sort(
+                                key=lambda x: x["endIndex"]
+                            )
                             collected_paragraph_styles = []
 
-                            for i, para_marker in enumerate(collected_paragraph_markers):
+                            for i, para_marker in enumerate(
+                                collected_paragraph_markers
+                            ):
                                 # Determine startIndex: previous paragraph's endIndex, or 0 for first paragraph
                                 start_index = 0
                                 if i > 0:
-                                    start_index = collected_paragraph_styles[i - 1]['endIndex']
+                                    start_index = collected_paragraph_styles[i - 1][
+                                        "endIndex"
+                                    ]
 
-                                collected_paragraph_styles.append({
-                                    'startIndex': start_index,
-                                    'endIndex': para_marker['endIndex'],
-                                    'style': para_marker['style']
-                                })
+                                collected_paragraph_styles.append(
+                                    {
+                                        "startIndex": start_index,
+                                        "endIndex": para_marker["endIndex"],
+                                        "style": para_marker["style"],
+                                    }
+                                )
 
                             # Handle last paragraph if it doesn't have a paragraph marker
                             # Find the maximum endIndex from textRuns to determine if there's unhandled text
                             max_text_index = 0
                             if collected_text_runs:
-                                max_text_index = max(tr['endIndex'] for tr in collected_text_runs)
+                                max_text_index = max(
+                                    tr["endIndex"] for tr in collected_text_runs
+                                )
 
                             # Check if there's text after the last paragraph marker
-                            last_para_end = collected_paragraph_styles[-1]['endIndex'] if collected_paragraph_styles else 0
-                            if max_text_index > last_para_end and default_paragraph_style:
-                                collected_paragraph_styles.append({
-                                    'startIndex': last_para_end,
-                                    'endIndex': max_text_index,
-                                    'style': default_paragraph_style
-                                })
+                            last_para_end = (
+                                collected_paragraph_styles[-1]["endIndex"]
+                                if collected_paragraph_styles
+                                else 0
+                            )
+                            if (
+                                max_text_index > last_para_end
+                                and default_paragraph_style
+                            ):
+                                collected_paragraph_styles.append(
+                                    {
+                                        "startIndex": last_para_end,
+                                        "endIndex": max_text_index,
+                                        "style": default_paragraph_style,
+                                    }
+                                )
 
                             # Phase 2: Generate API requests based on collected data
 
                             # Sort textRuns by startIndex to build text in correct order
-                            collected_text_runs.sort(key=lambda x: x['startIndex'])
+                            collected_text_runs.sort(key=lambda x: x["startIndex"])
 
                             # Build full text content by concatenating textRuns
-                            full_text_content = ''.join(tr['content'] for tr in collected_text_runs)
+                            full_text_content = "".join(
+                                tr["content"] for tr in collected_text_runs
+                            )
 
                             # Insert text if there's any content
                             if full_text_content:
-                                copy_requests.append({
-                                    'insertText': {
-                                        'objectId': new_element_id,
-                                        'insertionIndex': 0,
-                                        'text': full_text_content
+                                copy_requests.append(
+                                    {
+                                        "insertText": {
+                                            "objectId": new_element_id,
+                                            "insertionIndex": 0,
+                                            "text": full_text_content,
+                                        }
                                     }
-                                })
+                                )
 
                             # Apply text styles for each textRun using original indices
                             for text_run in collected_text_runs:
-                                style = text_run.get('style', {})
+                                style = text_run.get("style", {})
                                 if style:
                                     style_update = filter_text_style(style)
                                     if style_update:
-                                        copy_requests.append({
-                                            'updateTextStyle': {
-                                                'objectId': new_element_id,
-                                                'textRange': {
-                                                    'type': 'FIXED_RANGE',
-                                                    'startIndex': text_run['startIndex'],
-                                                    'endIndex': text_run['endIndex']
-                                                },
-                                                'style': style_update,
-                                                'fields': ','.join(style_update.keys())
+                                        copy_requests.append(
+                                            {
+                                                "updateTextStyle": {
+                                                    "objectId": new_element_id,
+                                                    "textRange": {
+                                                        "type": "FIXED_RANGE",
+                                                        "startIndex": text_run[
+                                                            "startIndex"
+                                                        ],
+                                                        "endIndex": text_run[
+                                                            "endIndex"
+                                                        ],
+                                                    },
+                                                    "style": style_update,
+                                                    "fields": ",".join(
+                                                        style_update.keys()
+                                                    ),
+                                                }
                                             }
-                                        })
+                                        )
 
                             # Apply paragraph styles for each paragraph
                             for para_info in collected_paragraph_styles:
-                                para_style = para_info['style']
-                                para_start = para_info['startIndex']
-                                para_end = para_info['endIndex']
+                                para_style = para_info["style"]
+                                para_start = para_info["startIndex"]
+                                para_end = para_info["endIndex"]
 
-                                if para_end > para_start:  # Only apply if paragraph has content
-                                    para_style_update = filter_paragraph_style(para_style)
+                                if (
+                                    para_end > para_start
+                                ):  # Only apply if paragraph has content
+                                    para_style_update = filter_paragraph_style(
+                                        para_style
+                                    )
                                     if para_style_update:
-                                        copy_requests.append({
-                                            'updateParagraphStyle': {
-                                                'objectId': new_element_id,
-                                                'textRange': {
-                                                    'type': 'FIXED_RANGE',
-                                                    'startIndex': para_start,
-                                                    'endIndex': para_end
-                                                },
-                                                'style': para_style_update,
-                                                'fields': ','.join(para_style_update.keys())
+                                        copy_requests.append(
+                                            {
+                                                "updateParagraphStyle": {
+                                                    "objectId": new_element_id,
+                                                    "textRange": {
+                                                        "type": "FIXED_RANGE",
+                                                        "startIndex": para_start,
+                                                        "endIndex": para_end,
+                                                    },
+                                                    "style": para_style_update,
+                                                    "fields": ",".join(
+                                                        para_style_update.keys()
+                                                    ),
+                                                }
                                             }
-                                        })
+                                        )
 
                             # If no paragraph markers found, apply default paragraph style to entire text
-                            if not collected_paragraph_styles and default_paragraph_style and full_text_content:
-                                para_style_update = filter_paragraph_style(default_paragraph_style)
+                            if (
+                                not collected_paragraph_styles
+                                and default_paragraph_style
+                                and full_text_content
+                            ):
+                                para_style_update = filter_paragraph_style(
+                                    default_paragraph_style
+                                )
                                 if para_style_update:
-                                    copy_requests.append({
-                                        'updateParagraphStyle': {
-                                            'objectId': new_element_id,
-                                            'textRange': {
-                                                'type': 'ALL'
-                                            },
-                                            'style': para_style_update,
-                                            'fields': ','.join(para_style_update.keys())
+                                    copy_requests.append(
+                                        {
+                                            "updateParagraphStyle": {
+                                                "objectId": new_element_id,
+                                                "textRange": {"type": "ALL"},
+                                                "style": para_style_update,
+                                                "fields": ",".join(
+                                                    para_style_update.keys()
+                                                ),
+                                            }
                                         }
-                                    })
+                                    )
 
                             # Remove trailing newline if present (extra newline issue)
-                            if full_text_content and full_text_content.endswith('\n'):
+                            if full_text_content and full_text_content.endswith("\n"):
                                 # Calculate the index of the trailing newline
                                 text_length = len(full_text_content)
-                                copy_requests.append({
-                                    'deleteText': {
-                                        'objectId': new_element_id,
-                                        'textRange': {
-                                            'type': 'FIXED_RANGE',
-                                            'startIndex': text_length - 1,
-                                            'endIndex': text_length
+                                copy_requests.append(
+                                    {
+                                        "deleteText": {
+                                            "objectId": new_element_id,
+                                            "textRange": {
+                                                "type": "FIXED_RANGE",
+                                                "startIndex": text_length - 1,
+                                                "endIndex": text_length,
+                                            },
                                         }
                                     }
-                                })
+                                )
 
-                    elif 'table' in element:
-                        table = element.get('table', {})
-                        transform = element.get('transform', {})
-                        size = element.get('size', {})
+                    elif "table" in element:
+                        table = element.get("table", {})
+                        transform = element.get("transform", {})
+                        size = element.get("size", {})
 
-                        table_rows = table.get('tableRows', [])
-                        table_columns = table.get('tableColumns', [])
+                        table_rows = table.get("tableRows", [])
+                        table_columns = table.get("tableColumns", [])
 
                         row_count = len(table_rows)
                         column_count = len(table_columns)
 
                         if row_count == 0 or column_count == 0:
-                            print(f"  ⚠️  Warning: Table element missing rows or columns, skipping")
+                            print(
+                                "  ⚠️  Warning: Table element missing rows or columns, skipping"
+                            )
                             continue
 
-                        new_table_id = str(uuid.uuid4()).replace('-', '')[:26]
+                        new_table_id = str(uuid.uuid4()).replace("-", "")[:26]
 
                         # Create table with the same dimensions and positioning
-                        copy_requests.append({
-                            'createTable': {
-                                'objectId': new_table_id,
-                                'elementProperties': {
-                                    'pageObjectId': new_slide_id,
-                                    'size': size,
-                                    'transform': transform
-                                },
-                                'rows': row_count,
-                                'columns': column_count
+                        copy_requests.append(
+                            {
+                                "createTable": {
+                                    "objectId": new_table_id,
+                                    "elementProperties": {
+                                        "pageObjectId": new_slide_id,
+                                        "size": size,
+                                        "transform": transform,
+                                    },
+                                    "rows": row_count,
+                                    "columns": column_count,
+                                }
                             }
-                        })
+                        )
 
                         # Copy column widths if present
                         for col_idx, column in enumerate(table_columns):
-                            col_props = column.get('tableColumnProperties', {})
+                            col_props = column.get("tableColumnProperties", {})
                             if col_props:
                                 filtered_col_props = {}
-                                if 'columnWidth' in col_props:
-                                    filtered_col_props['columnWidth'] = col_props['columnWidth']
+                                if "columnWidth" in col_props:
+                                    filtered_col_props["columnWidth"] = col_props[
+                                        "columnWidth"
+                                    ]
 
                                 if filtered_col_props:
-                                    copy_requests.append({
-                                        'updateTableColumnProperties': {
-                                            'objectId': new_table_id,
-                                            'columnIndices': [col_idx],
-                                            'tableColumnProperties': filtered_col_props,
-                                            'fields': ','.join(filtered_col_props.keys())
+                                    copy_requests.append(
+                                        {
+                                            "updateTableColumnProperties": {
+                                                "objectId": new_table_id,
+                                                "columnIndices": [col_idx],
+                                                "tableColumnProperties": filtered_col_props,
+                                                "fields": ",".join(
+                                                    filtered_col_props.keys()
+                                                ),
+                                            }
                                         }
-                                    })
+                                    )
 
                         # Helper to filter writable cell properties
                         def filter_table_cell_properties(cell_props):
@@ -899,11 +1114,16 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                                 return {}
 
                             writable_fields = [
-                                'tableCellBackgroundFill',
-                                'contentAlignment',
-                                'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-                                'tableCellBorderBottom', 'tableCellBorderTop',
-                                'tableCellBorderLeft', 'tableCellBorderRight'
+                                "tableCellBackgroundFill",
+                                "contentAlignment",
+                                "paddingTop",
+                                "paddingRight",
+                                "paddingBottom",
+                                "paddingLeft",
+                                "tableCellBorderBottom",
+                                "tableCellBorderTop",
+                                "tableCellBorderLeft",
+                                "tableCellBorderRight",
                             ]
 
                             filtered = {}
@@ -914,9 +1134,15 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
 
                         # Reuse text/paragraph style filters for table text
                         writable_text_style_fields = [
-                            'bold', 'italic', 'underline', 'strikethrough',
-                            'fontFamily', 'fontSize', 'foregroundColor', 'backgroundColor',
-                            'weightedFontFamily'
+                            "bold",
+                            "italic",
+                            "underline",
+                            "strikethrough",
+                            "fontFamily",
+                            "fontSize",
+                            "foregroundColor",
+                            "backgroundColor",
+                            "weightedFontFamily",
                         ]
 
                         def filter_text_style(text_style):
@@ -929,8 +1155,15 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                             return filtered
 
                         writable_paragraph_fields = [
-                            'alignment', 'direction', 'spacingMode', 'spaceAbove', 'spaceBelow',
-                            'lineSpacing', 'indentFirstLine', 'indentStart', 'indentEnd'
+                            "alignment",
+                            "direction",
+                            "spacingMode",
+                            "spaceAbove",
+                            "spaceBelow",
+                            "lineSpacing",
+                            "indentFirstLine",
+                            "indentStart",
+                            "indentEnd",
                         ]
 
                         def filter_paragraph_style(para_style):
@@ -945,227 +1178,315 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                         # Copy row heights and cell content/properties
                         for row_idx, row in enumerate(table_rows):
                             # Row height if available (minRowHeight is the writable field)
-                            row_props = row.get('tableRowProperties', {})
-                            row_height = row_props.get('minRowHeight', row.get('rowHeight'))
+                            row_props = row.get("tableRowProperties", {})
+                            row_height = row_props.get(
+                                "minRowHeight", row.get("rowHeight")
+                            )
                             if row_height:
-                                copy_requests.append({
-                                    'updateTableRowProperties': {
-                                        'objectId': new_table_id,
-                                        'rowIndices': [row_idx],
-                                        'tableRowProperties': {
-                                            'minRowHeight': row_height
-                                        },
-                                        'fields': 'minRowHeight'
+                                copy_requests.append(
+                                    {
+                                        "updateTableRowProperties": {
+                                            "objectId": new_table_id,
+                                            "rowIndices": [row_idx],
+                                            "tableRowProperties": {
+                                                "minRowHeight": row_height
+                                            },
+                                            "fields": "minRowHeight",
+                                        }
                                     }
-                                })
+                                )
 
-                            table_cells = row.get('tableCells', [])
+                            table_cells = row.get("tableCells", [])
                             for col_idx, cell in enumerate(table_cells):
                                 cell_location = {
-                                    'rowIndex': row_idx,
-                                    'columnIndex': col_idx
+                                    "rowIndex": row_idx,
+                                    "columnIndex": col_idx,
                                 }
 
                                 # Copy cell properties
-                                cell_props = cell.get('tableCellProperties', {})
-                                filtered_cell_props = filter_table_cell_properties(cell_props)
+                                cell_props = cell.get("tableCellProperties", {})
+                                filtered_cell_props = filter_table_cell_properties(
+                                    cell_props
+                                )
                                 if filtered_cell_props:
-                                    copy_requests.append({
-                                        'updateTableCellProperties': {
-                                            'objectId': new_table_id,
-                                            'tableRange': {
-                                                'location': cell_location,
-                                                'rowSpan': 1,
-                                                'columnSpan': 1
-                                            },
-                                            'tableCellProperties': filtered_cell_props,
-                                            'fields': ','.join(filtered_cell_props.keys())
+                                    copy_requests.append(
+                                        {
+                                            "updateTableCellProperties": {
+                                                "objectId": new_table_id,
+                                                "tableRange": {
+                                                    "location": cell_location,
+                                                    "rowSpan": 1,
+                                                    "columnSpan": 1,
+                                                },
+                                                "tableCellProperties": filtered_cell_props,
+                                                "fields": ",".join(
+                                                    filtered_cell_props.keys()
+                                                ),
+                                            }
                                         }
-                                    })
+                                    )
 
                                 # Copy text content and formatting inside the cell
-                                cell_text = cell.get('text', {})
-                                text_elements = cell_text.get('textElements', [])
-                                default_paragraph_style = cell_text.get('paragraphStyle')
+                                cell_text = cell.get("text", {})
+                                text_elements = cell_text.get("textElements", [])
+                                default_paragraph_style = cell_text.get(
+                                    "paragraphStyle"
+                                )
 
                                 collected_text_runs = []
                                 collected_paragraph_markers = []
 
                                 for te in text_elements:
-                                    if 'textRun' in te:
-                                        text_run = te['textRun']
-                                        content = text_run.get('content', '')
-                                        style = text_run.get('style', {})
-                                        start_index = te.get('startIndex', 0)
-                                        end_index = te.get('endIndex', start_index + len(content) if content else start_index)
+                                    if "textRun" in te:
+                                        text_run = te["textRun"]
+                                        content = text_run.get("content", "")
+                                        style = text_run.get("style", {})
+                                        start_index = te.get("startIndex", 0)
+                                        end_index = te.get(
+                                            "endIndex",
+                                            start_index + len(content)
+                                            if content
+                                            else start_index,
+                                        )
 
                                         if content:
-                                            collected_text_runs.append({
-                                                'startIndex': start_index,
-                                                'endIndex': end_index,
-                                                'content': content,
-                                                'style': style
-                                            })
+                                            collected_text_runs.append(
+                                                {
+                                                    "startIndex": start_index,
+                                                    "endIndex": end_index,
+                                                    "content": content,
+                                                    "style": style,
+                                                }
+                                            )
 
-                                    elif 'paragraphMarker' in te:
-                                        para_marker = te['paragraphMarker']
-                                        para_style = para_marker.get('style', {}) if 'style' in para_marker else None
-                                        paragraph_style = para_style if para_style else default_paragraph_style
+                                    elif "paragraphMarker" in te:
+                                        para_marker = te["paragraphMarker"]
+                                        para_style = (
+                                            para_marker.get("style", {})
+                                            if "style" in para_marker
+                                            else None
+                                        )
+                                        paragraph_style = (
+                                            para_style
+                                            if para_style
+                                            else default_paragraph_style
+                                        )
 
                                         if paragraph_style:
-                                            end_index = te.get('endIndex', 0)
-                                            collected_paragraph_markers.append({
-                                                'endIndex': end_index,
-                                                'style': paragraph_style
-                                            })
+                                            end_index = te.get("endIndex", 0)
+                                            collected_paragraph_markers.append(
+                                                {
+                                                    "endIndex": end_index,
+                                                    "style": paragraph_style,
+                                                }
+                                            )
 
-                                collected_paragraph_markers.sort(key=lambda x: x['endIndex'])
+                                collected_paragraph_markers.sort(
+                                    key=lambda x: x["endIndex"]
+                                )
                                 collected_paragraph_styles = []
 
-                                for i, para_marker in enumerate(collected_paragraph_markers):
+                                for i, para_marker in enumerate(
+                                    collected_paragraph_markers
+                                ):
                                     start_index = 0
                                     if i > 0:
-                                        start_index = collected_paragraph_styles[i - 1]['endIndex']
+                                        start_index = collected_paragraph_styles[i - 1][
+                                            "endIndex"
+                                        ]
 
-                                    collected_paragraph_styles.append({
-                                        'startIndex': start_index,
-                                        'endIndex': para_marker['endIndex'],
-                                        'style': para_marker['style']
-                                    })
+                                    collected_paragraph_styles.append(
+                                        {
+                                            "startIndex": start_index,
+                                            "endIndex": para_marker["endIndex"],
+                                            "style": para_marker["style"],
+                                        }
+                                    )
 
                                 max_text_index = 0
                                 if collected_text_runs:
-                                    max_text_index = max(tr['endIndex'] for tr in collected_text_runs)
+                                    max_text_index = max(
+                                        tr["endIndex"] for tr in collected_text_runs
+                                    )
 
-                                last_para_end = collected_paragraph_styles[-1]['endIndex'] if collected_paragraph_styles else 0
-                                if max_text_index > last_para_end and default_paragraph_style:
-                                    collected_paragraph_styles.append({
-                                        'startIndex': last_para_end,
-                                        'endIndex': max_text_index,
-                                        'style': default_paragraph_style
-                                    })
+                                last_para_end = (
+                                    collected_paragraph_styles[-1]["endIndex"]
+                                    if collected_paragraph_styles
+                                    else 0
+                                )
+                                if (
+                                    max_text_index > last_para_end
+                                    and default_paragraph_style
+                                ):
+                                    collected_paragraph_styles.append(
+                                        {
+                                            "startIndex": last_para_end,
+                                            "endIndex": max_text_index,
+                                            "style": default_paragraph_style,
+                                        }
+                                    )
 
-                                collected_text_runs.sort(key=lambda x: x['startIndex'])
-                                full_text_content = ''.join(tr['content'] for tr in collected_text_runs)
+                                collected_text_runs.sort(key=lambda x: x["startIndex"])
+                                full_text_content = "".join(
+                                    tr["content"] for tr in collected_text_runs
+                                )
 
                                 if full_text_content:
-                                    copy_requests.append({
-                                        'insertText': {
-                                            'objectId': new_table_id,
-                                            'cellLocation': cell_location,
-                                            'insertionIndex': 0,
-                                            'text': full_text_content
+                                    copy_requests.append(
+                                        {
+                                            "insertText": {
+                                                "objectId": new_table_id,
+                                                "cellLocation": cell_location,
+                                                "insertionIndex": 0,
+                                                "text": full_text_content,
+                                            }
                                         }
-                                    })
+                                    )
 
                                 for text_run in collected_text_runs:
-                                    style = text_run.get('style', {})
+                                    style = text_run.get("style", {})
                                     style_update = filter_text_style(style)
                                     if style_update:
-                                        copy_requests.append({
-                                            'updateTextStyle': {
-                                                'objectId': new_table_id,
-                                                'cellLocation': cell_location,
-                                                'textRange': {
-                                                    'type': 'FIXED_RANGE',
-                                                    'startIndex': text_run['startIndex'],
-                                                    'endIndex': text_run['endIndex']
-                                                },
-                                                'style': style_update,
-                                                'fields': ','.join(style_update.keys())
+                                        copy_requests.append(
+                                            {
+                                                "updateTextStyle": {
+                                                    "objectId": new_table_id,
+                                                    "cellLocation": cell_location,
+                                                    "textRange": {
+                                                        "type": "FIXED_RANGE",
+                                                        "startIndex": text_run[
+                                                            "startIndex"
+                                                        ],
+                                                        "endIndex": text_run[
+                                                            "endIndex"
+                                                        ],
+                                                    },
+                                                    "style": style_update,
+                                                    "fields": ",".join(
+                                                        style_update.keys()
+                                                    ),
+                                                }
                                             }
-                                        })
+                                        )
 
                                 for para_info in collected_paragraph_styles:
-                                    para_style = para_info['style']
-                                    para_start = para_info['startIndex']
-                                    para_end = para_info['endIndex']
+                                    para_style = para_info["style"]
+                                    para_start = para_info["startIndex"]
+                                    para_end = para_info["endIndex"]
 
                                     if para_end > para_start:
-                                        para_style_update = filter_paragraph_style(para_style)
+                                        para_style_update = filter_paragraph_style(
+                                            para_style
+                                        )
                                         if para_style_update:
-                                            copy_requests.append({
-                                                'updateParagraphStyle': {
-                                                    'objectId': new_table_id,
-                                                    'cellLocation': cell_location,
-                                                    'textRange': {
-                                                        'type': 'FIXED_RANGE',
-                                                        'startIndex': para_start,
-                                                        'endIndex': para_end
-                                                    },
-                                                    'style': para_style_update,
-                                                    'fields': ','.join(para_style_update.keys())
+                                            copy_requests.append(
+                                                {
+                                                    "updateParagraphStyle": {
+                                                        "objectId": new_table_id,
+                                                        "cellLocation": cell_location,
+                                                        "textRange": {
+                                                            "type": "FIXED_RANGE",
+                                                            "startIndex": para_start,
+                                                            "endIndex": para_end,
+                                                        },
+                                                        "style": para_style_update,
+                                                        "fields": ",".join(
+                                                            para_style_update.keys()
+                                                        ),
+                                                    }
                                                 }
-                                            })
+                                            )
 
-                                if not collected_paragraph_styles and default_paragraph_style and full_text_content:
-                                    para_style_update = filter_paragraph_style(default_paragraph_style)
+                                if (
+                                    not collected_paragraph_styles
+                                    and default_paragraph_style
+                                    and full_text_content
+                                ):
+                                    para_style_update = filter_paragraph_style(
+                                        default_paragraph_style
+                                    )
                                     if para_style_update:
-                                        copy_requests.append({
-                                            'updateParagraphStyle': {
-                                                'objectId': new_table_id,
-                                                'cellLocation': cell_location,
-                                                'textRange': {
-                                                    'type': 'ALL'
-                                                },
-                                                'style': para_style_update,
-                                                'fields': ','.join(para_style_update.keys())
+                                        copy_requests.append(
+                                            {
+                                                "updateParagraphStyle": {
+                                                    "objectId": new_table_id,
+                                                    "cellLocation": cell_location,
+                                                    "textRange": {"type": "ALL"},
+                                                    "style": para_style_update,
+                                                    "fields": ",".join(
+                                                        para_style_update.keys()
+                                                    ),
+                                                }
                                             }
-                                        })
+                                        )
 
-                                if full_text_content and full_text_content.endswith('\n'):
+                                if full_text_content and full_text_content.endswith(
+                                    "\n"
+                                ):
                                     text_length = len(full_text_content)
-                                    copy_requests.append({
-                                        'deleteText': {
-                                            'objectId': new_table_id,
-                                            'cellLocation': cell_location,
-                                            'textRange': {
-                                                'type': 'FIXED_RANGE',
-                                                'startIndex': text_length - 1,
-                                                'endIndex': text_length
+                                    copy_requests.append(
+                                        {
+                                            "deleteText": {
+                                                "objectId": new_table_id,
+                                                "cellLocation": cell_location,
+                                                "textRange": {
+                                                    "type": "FIXED_RANGE",
+                                                    "startIndex": text_length - 1,
+                                                    "endIndex": text_length,
+                                                },
                                             }
                                         }
-                                    })
+                                    )
 
-                    elif 'image' in element:
+                    elif "image" in element:
                         # Handle image elements - copy them from template
-                        image = element.get('image', {})
-                        transform = element.get('transform', {})
-                        size = element.get('size', {})
+                        image = element.get("image", {})
+                        transform = element.get("transform", {})
+                        size = element.get("size", {})
 
                         # Get image URL from the template element
                         # Image can have sourceUrl or contentUrl
                         image_url = None
-                        if 'sourceUrl' in image:
-                            image_url = image['sourceUrl']
-                        elif 'contentUrl' in image:
-                            image_url = image['contentUrl']
+                        if "sourceUrl" in image:
+                            image_url = image["sourceUrl"]
+                        elif "contentUrl" in image:
+                            image_url = image["contentUrl"]
 
                         if image_url:
                             create_image_request = {
-                                'createImage': {
-                                    'url': image_url,
-                                    'elementProperties': {
-                                        'pageObjectId': new_slide_id,
-                                        'size': size,
-                                        'transform': transform
-                                    }
+                                "createImage": {
+                                    "url": image_url,
+                                    "elementProperties": {
+                                        "pageObjectId": new_slide_id,
+                                        "size": size,
+                                        "transform": transform,
+                                    },
                                 }
                             }
 
                             copy_requests.append(create_image_request)
                         else:
-                            print(f"  ⚠️  Warning: Image element found but no URL available, skipping")
+                            print(
+                                "  ⚠️  Warning: Image element found but no URL available, skipping"
+                            )
 
                 # Execute copy requests in batches
                 if copy_requests:
                     batch_size = 50
                     for i in range(0, len(copy_requests), batch_size):
-                        batch = copy_requests[i:i+batch_size]
-                        slides_service.presentations().batchUpdate(
-                            presentationId=presentation_id,
-                            body={'requests': batch}
-                        ).execute()
+                        batch = copy_requests[i : i + batch_size]
+
+                        def _copy_batch():
+                            return (
+                                slides_service.presentations()
+                                .batchUpdate(
+                                    presentationId=presentation_id,
+                                    body={"requests": batch},
+                                )
+                                .execute()
+                            )
+
+                        retry_with_exponential_backoff(_copy_batch)
 
         print(f"  ✓ Replaced {len(slide_numbers)} slide(s) from template")
         return True
@@ -1173,8 +1494,10 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
     except Exception as error:
         print(f"  ✗ Error replacing slides from template: {error}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 def copy_template_presentation(spreadsheet_name, template_id, output_folder_id, creds):
     """
@@ -1189,42 +1512,75 @@ def copy_template_presentation(spreadsheet_name, template_id, output_folder_id, 
     Returns:
         str: ID of the copied presentation
     """
-    drive_service = build('drive', 'v3', credentials=creds)
+    drive_service = build("drive", "v3", credentials=creds)
 
     # Copy the template
-    print(f"Copying template presentation...")
-    copied_file = drive_service.files().copy(
-        fileId=template_id,
-        body={'name': f"{spreadsheet_name}.gslides"},
-        supportsAllDrives=True
-    ).execute()
+    print("Copying template presentation...")
 
-    new_presentation_id = copied_file.get('id')
-    print(f"Created presentation: {spreadsheet_name}.gslides (ID: {new_presentation_id})")
+    def _copy_file():
+        return (
+            drive_service.files()
+            .copy(
+                fileId=template_id,
+                body={"name": f"{spreadsheet_name}.gslides"},
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
+
+    copied_file = retry_with_exponential_backoff(_copy_file)
+
+    new_presentation_id = copied_file.get("id")
+    print(
+        f"Created presentation: {spreadsheet_name}.gslides (ID: {new_presentation_id})"
+    )
 
     # Move to output folder
-    print(f"Moving presentation to output folder...")
-    file_metadata = drive_service.files().get(fileId=new_presentation_id, fields='parents', supportsAllDrives=True).execute()
-    previous_parents = ",".join(file_metadata.get('parents', []))
+    print("Moving presentation to output folder...")
+
+    def _get_file_metadata():
+        return (
+            drive_service.files()
+            .get(fileId=new_presentation_id, fields="parents", supportsAllDrives=True)
+            .execute()
+        )
+
+    file_metadata = retry_with_exponential_backoff(_get_file_metadata)
+    previous_parents = ",".join(file_metadata.get("parents", []))
+
+    def _update_file_with_parents():
+        return (
+            drive_service.files()
+            .update(
+                fileId=new_presentation_id,
+                addParents=output_folder_id,
+                removeParents=previous_parents,
+                fields="id, parents",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
+
+    def _update_file_add_only():
+        return (
+            drive_service.files()
+            .update(
+                fileId=new_presentation_id,
+                addParents=output_folder_id,
+                fields="id, parents",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
 
     if previous_parents:
-        drive_service.files().update(
-            fileId=new_presentation_id,
-            addParents=output_folder_id,
-            removeParents=previous_parents,
-            fields='id, parents',
-            supportsAllDrives=True
-        ).execute()
+        retry_with_exponential_backoff(_update_file_with_parents)
     else:
         # If no previous parents, just add to the folder
-        drive_service.files().update(
-            fileId=new_presentation_id,
-            addParents=output_folder_id,
-            fields='id, parents',
-            supportsAllDrives=True
-        ).execute()
+        retry_with_exponential_backoff(_update_file_add_only)
 
     return new_presentation_id
+
 
 def get_chart_id_from_sheet(spreadsheet_id, sheet_name, creds):
     """
@@ -1238,20 +1594,27 @@ def get_chart_id_from_sheet(spreadsheet_id, sheet_name, creds):
     Returns:
         int: Chart ID, or None if not found
     """
-    sheets_service = build('sheets', 'v4', credentials=creds)
+    sheets_service = build("sheets", "v4", credentials=creds)
 
     try:
         # Get the spreadsheet to find charts
-        spreadsheet = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        def _get_spreadsheet():
+            return (
+                sheets_service.spreadsheets()
+                .get(spreadsheetId=spreadsheet_id)
+                .execute()
+            )
+
+        spreadsheet = retry_with_exponential_backoff(_get_spreadsheet)
 
         # Find the sheet and get its charts
-        for sheet in spreadsheet.get('sheets', []):
-            if sheet['properties']['title'] == sheet_name:
+        for sheet in spreadsheet.get("sheets", []):
+            if sheet["properties"]["title"] == sheet_name:
                 # Charts are stored in the 'charts' property of the sheet
-                charts = sheet.get('charts', [])
+                charts = sheet.get("charts", [])
                 if charts:
                     # Return the first chart's ID
-                    return charts[0].get('chartId')
+                    return charts[0].get("chartId")
                 break
 
         return None
@@ -1259,6 +1622,7 @@ def get_chart_id_from_sheet(spreadsheet_id, sheet_name, creds):
     except HttpError as error:
         print(f"Error getting chart from sheet '{sheet_name}': {error}")
         return None
+
 
 def get_image_file_from_folder(entity_folder_id, picture_name, creds):
     """
@@ -1273,23 +1637,23 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
     Returns:
         str: Image file ID that can be used to get public URL, or None if not found
     """
-    drive_service = build('drive', 'v3', credentials=creds)
+    drive_service = build("drive", "v3", credentials=creds)
 
     try:
         # Construct expected filename: picture-<picture_name>
         expected_filename_base = f"picture-{picture_name}"
 
         # Try different image extensions
-        image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg']
+        image_extensions = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg"]
 
         image_mime_types = [
-            'image/png',
-            'image/jpeg',
-            'image/jpg',
-            'image/gif',
-            'image/bmp',
-            'image/webp',
-            'image/svg+xml'
+            "image/png",
+            "image/jpeg",
+            "image/jpg",
+            "image/gif",
+            "image/bmp",
+            "image/webp",
+            "image/svg+xml",
         ]
 
         # Build query to search for image files matching the expected filename pattern
@@ -1302,19 +1666,27 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
             query = f"'{entity_folder_id}' in parents and name='{image_filename}' and trashed=false and ({mime_query})"
 
             try:
-                results = drive_service.files().list(
-                    q=query,
-                    fields='files(id, name, mimeType)',
-                    pageSize=10,
-                    supportsAllDrives=True,
-                    includeItemsFromAllDrives=True
-                ).execute()
 
-                files = results.get('files', [])
+                def _list_files():
+                    return (
+                        drive_service.files()
+                        .list(
+                            q=query,
+                            fields="files(id, name, mimeType)",
+                            pageSize=10,
+                            supportsAllDrives=True,
+                            includeItemsFromAllDrives=True,
+                        )
+                        .execute()
+                    )
+
+                results = retry_with_exponential_backoff(_list_files)
+
+                files = results.get("files", [])
                 if files:
                     # Return the file ID - we'll grant public access in replace_textbox_with_image
-                    return files[0]['id']
-            except HttpError as e:
+                    return files[0]["id"]
+            except HttpError:
                 # Continue to next extension if this one fails
                 continue
 
@@ -1323,23 +1695,33 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
         query = f"'{entity_folder_id}' in parents and name contains '{expected_filename_base}' and trashed=false and ({mime_query})"
 
         try:
-            results = drive_service.files().list(
-                q=query,
-                fields='files(id, name, mimeType)',
-                pageSize=10,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True
-            ).execute()
 
-            files = results.get('files', [])
+            def _list_files_flexible():
+                return (
+                    drive_service.files()
+                    .list(
+                        q=query,
+                        fields="files(id, name, mimeType)",
+                        pageSize=10,
+                        supportsAllDrives=True,
+                        includeItemsFromAllDrives=True,
+                    )
+                    .execute()
+                )
+
+            results = retry_with_exponential_backoff(_list_files_flexible)
+
+            files = results.get("files", [])
             if files:
                 # Return the file ID - we'll grant public access in replace_textbox_with_image
-                return files[0]['id']
+                return files[0]["id"]
         except HttpError:
             pass
 
         # If no image found, return None
-        print(f"  ⚠️  No image file found matching 'picture-{picture_name}' in entity folder")
+        print(
+            f"  ⚠️  No image file found matching 'picture-{picture_name}' in entity folder"
+        )
         return None
 
     except HttpError as error:
@@ -1349,7 +1731,16 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
         print(f"Error getting image file for 'picture-{picture_name}': {error}")
         return None
 
-def replace_textbox_with_chart(presentation_id, slide_id, slide_number, textbox_element, spreadsheet_id, sheet_name, creds):
+
+def replace_textbox_with_chart(
+    presentation_id,
+    slide_id,
+    slide_number,
+    textbox_element,
+    spreadsheet_id,
+    sheet_name,
+    creds,
+):
     """
     Replace a textbox element with a linked chart from a sheet.
     Maintains the z-order position of the original textbox.
@@ -1366,17 +1757,22 @@ def replace_textbox_with_chart(presentation_id, slide_id, slide_number, textbox_
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = build('slides', 'v1', credentials=creds)
-    sheets_service = build('sheets', 'v4', credentials=creds)
+    slides_service = build("slides", "v1", credentials=creds)
+    sheets_service = build("sheets", "v4", credentials=creds)
 
     # Get the slide to find the z-order index of the textbox
-    presentation = slides_service.presentations().get(presentationId=presentation_id).execute()
-    presentation_slides = presentation.get('slides', [])
+    def _get_presentation_for_chart():
+        return (
+            slides_service.presentations().get(presentationId=presentation_id).execute()
+        )
+
+    presentation = retry_with_exponential_backoff(_get_presentation_for_chart)
+    presentation_slides = presentation.get("slides", [])
 
     # Find the slide and get its pageElements
     slide = None
     for s in presentation_slides:
-        if s.get('objectId') == slide_id:
+        if s.get("objectId") == slide_id:
             slide = s
             break
 
@@ -1385,61 +1781,74 @@ def replace_textbox_with_chart(presentation_id, slide_id, slide_number, textbox_
         return False
 
     # Find the z-order index of the textbox element
-    textbox_object_id = textbox_element.get('objectId')
-    page_elements = slide.get('pageElements', [])
+    textbox_object_id = textbox_element.get("objectId")
+    page_elements = slide.get("pageElements", [])
     z_order_index = None
 
     for idx, element in enumerate(page_elements):
-        if element.get('objectId') == textbox_object_id:
+        if element.get("objectId") == textbox_object_id:
             z_order_index = idx
             break
 
     if z_order_index is None:
-        print(f"Warning: Could not find textbox element in slide {slide_number}, z-order may not be preserved")
+        print(
+            f"Warning: Could not find textbox element in slide {slide_number}, z-order may not be preserved"
+        )
         # Continue anyway, but z-order won't be preserved
 
     # Get position and size from textbox
-    transform = textbox_element.get('transform', {})
+    transform = textbox_element.get("transform", {})
 
     # Extract translate values (position)
-    translate_x = transform.get('translateX', 0)
-    translate_y = transform.get('translateY', 0)
+    translate_x = transform.get("translateX", 0)
+    translate_y = transform.get("translateY", 0)
 
     # Handle both numeric and object formats
     if isinstance(translate_x, dict):
-        translate_x = translate_x.get('magnitude', 0)
+        translate_x = translate_x.get("magnitude", 0)
     if isinstance(translate_y, dict):
-        translate_y = translate_y.get('magnitude', 0)
+        translate_y = translate_y.get("magnitude", 0)
 
     # Extract scale factors
-    scale_x = transform.get('scaleX', 1)
-    scale_y = transform.get('scaleY', 1)
+    scale_x = transform.get("scaleX", 1)
+    scale_y = transform.get("scaleY", 1)
 
     # Handle both numeric and object formats for scale
     if isinstance(scale_x, dict):
-        scale_x = scale_x.get('magnitude', 1)
+        scale_x = scale_x.get("magnitude", 1)
     if isinstance(scale_y, dict):
-        scale_y = scale_y.get('magnitude', 1)
+        scale_y = scale_y.get("magnitude", 1)
 
     # Get base size from size field
-    size = textbox_element.get('size', {})
-    width_obj = size.get('width', {})
-    height_obj = size.get('height', {})
+    size = textbox_element.get("size", {})
+    width_obj = size.get("width", {})
+    height_obj = size.get("height", {})
 
-    base_width = width_obj.get('magnitude', 4000000) if isinstance(width_obj, dict) else (width_obj if width_obj else 4000000)
-    base_height = height_obj.get('magnitude', 3000000) if isinstance(height_obj, dict) else (height_obj if height_obj else 3000000)
+    base_width = (
+        width_obj.get("magnitude", 4000000)
+        if isinstance(width_obj, dict)
+        else (width_obj if width_obj else 4000000)
+    )
+    base_height = (
+        height_obj.get("magnitude", 3000000)
+        if isinstance(height_obj, dict)
+        else (height_obj if height_obj else 3000000)
+    )
 
     # Calculate actual rendered size (base size * scale)
     actual_width = base_width * scale_x
     actual_height = base_height * scale_y
 
     # Get the sheet ID for the chart
-    spreadsheet = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    def _get_spreadsheet_for_chart():
+        return sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+
+    spreadsheet = retry_with_exponential_backoff(_get_spreadsheet_for_chart)
     sheet_id = None
 
-    for sheet in spreadsheet.get('sheets', []):
-        if sheet['properties']['title'] == sheet_name:
-            sheet_id = sheet['properties']['sheetId']
+    for sheet in spreadsheet.get("sheets", []):
+        if sheet["properties"]["title"] == sheet_name:
+            sheet_id = sheet["properties"]["sheetId"]
             break
 
     if sheet_id is None:
@@ -1450,47 +1859,46 @@ def replace_textbox_with_chart(presentation_id, slide_id, slide_number, textbox_
     chart_id = get_chart_id_from_sheet(spreadsheet_id, sheet_name, creds)
 
     if chart_id is None:
-        print(f"Error: No chart found in sheet '{sheet_name}'. Chart must exist in the sheet.")
+        print(
+            f"Error: No chart found in sheet '{sheet_name}'. Chart must exist in the sheet."
+        )
         return False
 
     # Prepare requests to delete textbox and insert chart
     requests = [
+        {"deleteObject": {"objectId": textbox_element.get("objectId")}},
         {
-            'deleteObject': {
-                'objectId': textbox_element.get('objectId')
+            "createSheetsChart": {
+                "spreadsheetId": spreadsheet_id,
+                "chartId": chart_id,
+                "linkingMode": "LINKED",
+                "elementProperties": {
+                    "pageObjectId": slide_id,
+                    "size": {
+                        "height": {"magnitude": actual_height, "unit": "EMU"},
+                        "width": {"magnitude": actual_width, "unit": "EMU"},
+                    },
+                    "transform": {
+                        "scaleX": 1,
+                        "scaleY": 1,
+                        "translateX": translate_x,
+                        "translateY": translate_y,
+                        "unit": "EMU",
+                    },
+                },
             }
         },
-        {
-            'createSheetsChart': {
-                'spreadsheetId': spreadsheet_id,
-                'chartId': chart_id,
-                'linkingMode': 'LINKED',
-                'elementProperties': {
-                    'pageObjectId': slide_id,
-                    'size': {
-                        'height': {'magnitude': actual_height, 'unit': 'EMU'},
-                        'width': {'magnitude': actual_width, 'unit': 'EMU'}
-                    },
-                    'transform': {
-                        'scaleX': 1,
-                        'scaleY': 1,
-                        'translateX': translate_x,
-                        'translateY': translate_y,
-                        'unit': 'EMU'
-                    }
-                }
-            }
-        }
     ]
 
     # Execute the batch update with retry logic
-    body = {'requests': requests}
+    body = {"requests": requests}
 
     def execute_batch_update():
-        return slides_service.presentations().batchUpdate(
-            presentationId=presentation_id,
-            body=body
-        ).execute()
+        return (
+            slides_service.presentations()
+            .batchUpdate(presentationId=presentation_id, body=body)
+            .execute()
+        )
 
     try:
         response = retry_with_exponential_backoff(execute_batch_update)
@@ -1498,12 +1906,12 @@ def replace_textbox_with_chart(presentation_id, slide_id, slide_number, textbox_
         # Get the objectId of the newly created chart and restore z-order
         if z_order_index is not None:
             # Extract the objectId from the response
-            replies = response.get('replies', [])
+            replies = response.get("replies", [])
             new_chart_object_id = None
 
             for reply in replies:
-                if 'createSheetsChart' in reply:
-                    new_chart_object_id = reply['createSheetsChart'].get('objectId')
+                if "createSheetsChart" in reply:
+                    new_chart_object_id = reply["createSheetsChart"].get("objectId")
                     break
 
             if new_chart_object_id:
@@ -1511,16 +1919,25 @@ def replace_textbox_with_chart(presentation_id, slide_id, slide_number, textbox_
                 # Since we deleted the element at z_order_index, the new element is at the end
                 # We need to move it back to z_order_index
                 # Get current slide state to find the correct new index
-                updated_presentation = slides_service.presentations().get(presentationId=presentation_id).execute()
-                updated_slides = updated_presentation.get('slides', [])
+                def _get_updated_presentation_chart_zorder():
+                    return (
+                        slides_service.presentations()
+                        .get(presentationId=presentation_id)
+                        .execute()
+                    )
+
+                updated_presentation = retry_with_exponential_backoff(
+                    _get_updated_presentation_chart_zorder
+                )
+                updated_slides = updated_presentation.get("slides", [])
 
                 for s in updated_slides:
-                    if s.get('objectId') == slide_id:
-                        updated_page_elements = s.get('pageElements', [])
+                    if s.get("objectId") == slide_id:
+                        updated_page_elements = s.get("pageElements", [])
                         # Find the current index of the new chart
                         current_index = None
                         for idx, element in enumerate(updated_page_elements):
-                            if element.get('objectId') == new_chart_object_id:
+                            if element.get("objectId") == new_chart_object_id:
                                 current_index = idx
                                 break
 
@@ -1536,32 +1953,52 @@ def replace_textbox_with_chart(presentation_id, slide_id, slide_number, textbox_
                                 # Use SEND_BACKWARD the required number of times
                                 order_requests = []
                                 for _ in range(positions_to_move):
-                                    order_requests.append({
-                                        'updatePageElementsZOrder': {
-                                            'pageElementObjectIds': [new_chart_object_id],
-                                            'operation': 'SEND_BACKWARD'
+                                    order_requests.append(
+                                        {
+                                            "updatePageElementsZOrder": {
+                                                "pageElementObjectIds": [
+                                                    new_chart_object_id
+                                                ],
+                                                "operation": "SEND_BACKWARD",
+                                            }
                                         }
-                                    })
+                                    )
 
                                 def execute_order_update():
-                                    return slides_service.presentations().batchUpdate(
-                                        presentationId=presentation_id,
-                                        body={'requests': order_requests}
-                                    ).execute()
+                                    return (
+                                        slides_service.presentations()
+                                        .batchUpdate(
+                                            presentationId=presentation_id,
+                                            body={"requests": order_requests},
+                                        )
+                                        .execute()
+                                    )
 
                                 try:
                                     retry_with_exponential_backoff(execute_order_update)
                                 except HttpError as order_error:
-                                    print(f"  ⚠️  Warning: Could not restore z-order position: {order_error}")
+                                    print(
+                                        f"  ⚠️  Warning: Could not restore z-order position: {order_error}"
+                                    )
                         break
 
-        print(f"  ✓ Replaced textbox with chart from sheet '{sheet_name}' in slide {slide_number}")
+        print(
+            f"  ✓ Replaced textbox with chart from sheet '{sheet_name}' in slide {slide_number}"
+        )
         return True
     except HttpError as error:
         print(f"Error replacing textbox with chart in slide {slide_number}: {error}")
         return False
 
-def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_element, image_url_or_file_id, creds):
+
+def replace_textbox_with_image(
+    presentation_id,
+    slide_id,
+    slide_number,
+    textbox_element,
+    image_url_or_file_id,
+    creds,
+):
     """
     Replace a textbox element with an image, resizing it to match the textbox dimensions.
     Maintains the z-order position of the original textbox.
@@ -1577,17 +2014,22 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = build('slides', 'v1', credentials=creds)
-    drive_service = build('drive', 'v3', credentials=creds)
+    slides_service = build("slides", "v1", credentials=creds)
+    drive_service = build("drive", "v3", credentials=creds)
 
     # Get the slide to find the z-order index of the textbox
-    presentation = slides_service.presentations().get(presentationId=presentation_id).execute()
-    presentation_slides = presentation.get('slides', [])
+    def _get_presentation_for_image_replace():
+        return (
+            slides_service.presentations().get(presentationId=presentation_id).execute()
+        )
+
+    presentation = retry_with_exponential_backoff(_get_presentation_for_image_replace)
+    presentation_slides = presentation.get("slides", [])
 
     # Find the slide and get its pageElements
     slide = None
     for s in presentation_slides:
-        if s.get('objectId') == slide_id:
+        if s.get("objectId") == slide_id:
             slide = s
             break
 
@@ -1596,56 +2038,68 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
         return False
 
     # Find the z-order index of the textbox element
-    textbox_object_id = textbox_element.get('objectId')
-    page_elements = slide.get('pageElements', [])
+    textbox_object_id = textbox_element.get("objectId")
+    page_elements = slide.get("pageElements", [])
     z_order_index = None
 
     for idx, element in enumerate(page_elements):
-        if element.get('objectId') == textbox_object_id:
+        if element.get("objectId") == textbox_object_id:
             z_order_index = idx
             break
 
     if z_order_index is None:
-        print(f"Warning: Could not find textbox element in slide {slide_number}, z-order may not be preserved")
+        print(
+            f"Warning: Could not find textbox element in slide {slide_number}, z-order may not be preserved"
+        )
         # Continue anyway, but z-order won't be preserved
 
     # Get position and size from textbox
-    transform = textbox_element.get('transform', {})
+    transform = textbox_element.get("transform", {})
 
     # Extract translate values (position)
-    translate_x = transform.get('translateX', 0)
-    translate_y = transform.get('translateY', 0)
+    translate_x = transform.get("translateX", 0)
+    translate_y = transform.get("translateY", 0)
 
     # Handle both numeric and object formats
     if isinstance(translate_x, dict):
-        translate_x = translate_x.get('magnitude', 0)
+        translate_x = translate_x.get("magnitude", 0)
     if isinstance(translate_y, dict):
-        translate_y = translate_y.get('magnitude', 0)
+        translate_y = translate_y.get("magnitude", 0)
 
     # Extract scale factors
-    scale_x = transform.get('scaleX', 1)
-    scale_y = transform.get('scaleY', 1)
+    scale_x = transform.get("scaleX", 1)
+    scale_y = transform.get("scaleY", 1)
 
     # Handle both numeric and object formats for scale
     if isinstance(scale_x, dict):
-        scale_x = scale_x.get('magnitude', 1)
+        scale_x = scale_x.get("magnitude", 1)
     if isinstance(scale_y, dict):
-        scale_y = scale_y.get('magnitude', 1)
+        scale_y = scale_y.get("magnitude", 1)
 
     # Get base size from size field
-    size = textbox_element.get('size', {})
-    width_obj = size.get('width', {})
-    height_obj = size.get('height', {})
+    size = textbox_element.get("size", {})
+    width_obj = size.get("width", {})
+    height_obj = size.get("height", {})
 
-    base_width = width_obj.get('magnitude', 4000000) if isinstance(width_obj, dict) else (width_obj if width_obj else 4000000)
-    base_height = height_obj.get('magnitude', 3000000) if isinstance(height_obj, dict) else (height_obj if height_obj else 3000000)
+    base_width = (
+        width_obj.get("magnitude", 4000000)
+        if isinstance(width_obj, dict)
+        else (width_obj if width_obj else 4000000)
+    )
+    base_height = (
+        height_obj.get("magnitude", 3000000)
+        if isinstance(height_obj, dict)
+        else (height_obj if height_obj else 3000000)
+    )
 
     # Calculate actual rendered size (base size * scale)
     actual_width = base_width * scale_x
     actual_height = base_height * scale_y
 
     # Determine if image_url_or_file_id is a URL or a Drive file ID
-    is_url = image_url_or_file_id.startswith('http://') or image_url_or_file_id.startswith('https://')
+    is_url = image_url_or_file_id.startswith(
+        "http://"
+    ) or image_url_or_file_id.startswith("https://")
 
     image_url = image_url_or_file_id
     had_public_permission = False
@@ -1653,24 +2107,31 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
 
     if not is_url:
         # It's a Drive file ID - temporarily grant public access
-        print(f"  🏞️ Image url is a drive file")
+        print("  🏞️ Image url is a drive file")
         file_id = image_url_or_file_id
 
         try:
             # First, check if file already has public access
             try:
-                permissions = drive_service.permissions().list(
-                    fileId=file_id,
-                    fields='permissions(id,type,role)',
-                    supportsAllDrives=True
-                ).execute()
+                permissions = (
+                    drive_service.permissions()
+                    .list(
+                        fileId=file_id,
+                        fields="permissions(id,type,role)",
+                        supportsAllDrives=True,
+                    )
+                    .execute()
+                )
 
                 # Check if 'anyone' permission already exists
                 has_public_access = False
-                for perm in permissions.get('permissions', []):
-                    if perm.get('type') == 'anyone' and perm.get('role') in ['reader', 'viewer']:
+                for perm in permissions.get("permissions", []):
+                    if perm.get("type") == "anyone" and perm.get("role") in [
+                        "reader",
+                        "viewer",
+                    ]:
                         has_public_access = True
-                        permission_id = perm.get('id')
+                        permission_id = perm.get("id")
                         break
             except HttpError:
                 # If we can't check permissions, assume it's not public
@@ -1679,48 +2140,76 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
             # If not publicly accessible, try to grant temporary public access
             if not has_public_access:
                 try:
-                    permission = {
-                        'type': 'anyone',
-                        'role': 'reader'
-                    }
-                    result = drive_service.permissions().create(
-                        fileId=file_id,
-                        body=permission,
-                        supportsAllDrives=True
-                    ).execute()
-                    permission_id = result.get('id')
+                    permission = {"type": "anyone", "role": "reader"}
+
+                    def _create_permission():
+                        return (
+                            drive_service.permissions()
+                            .create(
+                                fileId=file_id, body=permission, supportsAllDrives=True
+                            )
+                            .execute()
+                        )
+
+                    result = retry_with_exponential_backoff(_create_permission)
+                    permission_id = result.get("id")
                     had_public_permission = True
-                    print(f"    ℹ️  Temporarily granted public access to image file for insertion")
+                    print(
+                        "    ℹ️  Temporarily granted public access to image file for insertion"
+                    )
                 except HttpError as perm_error:
                     # If we can't modify permissions, check if file has a shareable link
-                    print(f"    ⚠️  Cannot modify file permissions (app lacks write access). Checking for existing shareable link...")
+                    print(
+                        "    ⚠️  Cannot modify file permissions (app lacks write access). Checking for existing shareable link..."
+                    )
                     # Try to get webContentLink - this might work if file is already shared
                     try:
-                        file_metadata = drive_service.files().get(
-                            fileId=file_id,
-                            fields='webContentLink,webViewLink',
-                            supportsAllDrives=True
-                        ).execute()
 
-                        web_content_link = file_metadata.get('webContentLink')
+                        def _get_file_metadata():
+                            return (
+                                drive_service.files()
+                                .get(
+                                    fileId=file_id,
+                                    fields="webContentLink,webViewLink",
+                                    supportsAllDrives=True,
+                                )
+                                .execute()
+                            )
+
+                        file_metadata = retry_with_exponential_backoff(
+                            _get_file_metadata
+                        )
+
+                        web_content_link = file_metadata.get("webContentLink")
                         if web_content_link:
                             # Extract file ID from webContentLink and construct direct download URL
                             image_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-                            print(f"    ℹ️  Using existing shareable link (file may need to be manually shared)")
+                            print(
+                                "    ℹ️  Using existing shareable link (file may need to be manually shared)"
+                            )
                         else:
                             # No shareable link available
-                            raise ValueError("File is not publicly accessible and app cannot modify permissions. Please manually share the file with 'Anyone with the link' access.")
-                    except Exception as link_error:
-                        raise ValueError(f"File is not publicly accessible. Please manually share the image file (ID: {file_id}) with 'Anyone with the link' access, or grant the app write access to modify permissions. Error: {perm_error}")
+                            raise ValueError(
+                                "File is not publicly accessible and app cannot modify permissions. Please manually share the file with 'Anyone with the link' access."
+                            )
+                    except Exception:
+                        raise ValueError(
+                            f"File is not publicly accessible. Please manually share the image file (ID: {file_id}) with 'Anyone with the link' access, or grant the app write access to modify permissions. Error: {perm_error}"
+                        )
 
             # Get the public URL for the image
-            file_metadata = drive_service.files().get(
-                fileId=file_id,
-                fields='webContentLink',
-                supportsAllDrives=True
-            ).execute()
+            def _get_file_metadata_public():
+                return (
+                    drive_service.files()
+                    .get(
+                        fileId=file_id, fields="webContentLink", supportsAllDrives=True
+                    )
+                    .execute()
+                )
 
-            web_content_link = file_metadata.get('webContentLink')
+            file_metadata = retry_with_exponential_backoff(_get_file_metadata_public)
+
+            web_content_link = file_metadata.get("webContentLink")
             if web_content_link:
                 # Convert webContentLink to direct download URL
                 # webContentLink format: https://drive.google.com/uc?id=FILE_ID&export=download
@@ -1732,52 +2221,54 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
 
         except (HttpError, ValueError) as e:
             error_msg = str(e)
-            if "manually share" in error_msg.lower() or "cannot modify" in error_msg.lower():
+            if (
+                "manually share" in error_msg.lower()
+                or "cannot modify" in error_msg.lower()
+            ):
                 print(f"    ⚠️  {error_msg}")
             else:
                 print(f"    ⚠️  Error setting up image file permissions: {e}")
             # Fallback to basic Drive URL (may not work if file is not public)
             image_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-            print(f"    ⚠️  Attempting to use file URL anyway (may fail if file is not publicly accessible)")
+            print(
+                "    ⚠️  Attempting to use file URL anyway (may fail if file is not publicly accessible)"
+            )
 
     # Prepare requests to delete textbox and insert image
     create_image_request = {
-        'createImage': {
-            'url': image_url,
-            'elementProperties': {
-                'pageObjectId': slide_id,
-                'size': {
-                    'height': {'magnitude': actual_height, 'unit': 'EMU'},
-                    'width': {'magnitude': actual_width, 'unit': 'EMU'}
+        "createImage": {
+            "url": image_url,
+            "elementProperties": {
+                "pageObjectId": slide_id,
+                "size": {
+                    "height": {"magnitude": actual_height, "unit": "EMU"},
+                    "width": {"magnitude": actual_width, "unit": "EMU"},
                 },
-                'transform': {
-                    'scaleX': 1,
-                    'scaleY': 1,
-                    'translateX': translate_x,
-                    'translateY': translate_y,
-                    'unit': 'EMU'
-                }
-            }
+                "transform": {
+                    "scaleX": 1,
+                    "scaleY": 1,
+                    "translateX": translate_x,
+                    "translateY": translate_y,
+                    "unit": "EMU",
+                },
+            },
         }
     }
 
     requests = [
-        {
-            'deleteObject': {
-                'objectId': textbox_element.get('objectId')
-            }
-        },
-        create_image_request
+        {"deleteObject": {"objectId": textbox_element.get("objectId")}},
+        create_image_request,
     ]
 
     # Execute the batch update with retry logic
-    body = {'requests': requests}
+    body = {"requests": requests}
 
     def execute_batch_update():
-        return slides_service.presentations().batchUpdate(
-            presentationId=presentation_id,
-            body=body
-        ).execute()
+        return (
+            slides_service.presentations()
+            .batchUpdate(presentationId=presentation_id, body=body)
+            .execute()
+        )
 
     try:
         response = retry_with_exponential_backoff(execute_batch_update)
@@ -1785,12 +2276,12 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
         # Get the objectId of the newly created image and restore z-order
         if z_order_index is not None:
             # Extract the objectId from the response
-            replies = response.get('replies', [])
+            replies = response.get("replies", [])
             new_image_object_id = None
 
             for reply in replies:
-                if 'createImage' in reply:
-                    new_image_object_id = reply['createImage'].get('objectId')
+                if "createImage" in reply:
+                    new_image_object_id = reply["createImage"].get("objectId")
                     break
 
             if new_image_object_id:
@@ -1798,16 +2289,20 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
                 # Since we deleted the element at z_order_index, the new element is at the end
                 # We need to move it back to z_order_index
                 # Get current slide state to find the correct new index
-                updated_presentation = slides_service.presentations().get(presentationId=presentation_id).execute()
-                updated_slides = updated_presentation.get('slides', [])
+                updated_presentation = (
+                    slides_service.presentations()
+                    .get(presentationId=presentation_id)
+                    .execute()
+                )
+                updated_slides = updated_presentation.get("slides", [])
 
                 for s in updated_slides:
-                    if s.get('objectId') == slide_id:
-                        updated_page_elements = s.get('pageElements', [])
+                    if s.get("objectId") == slide_id:
+                        updated_page_elements = s.get("pageElements", [])
                         # Find the current index of the new image
                         current_index = None
                         for idx, element in enumerate(updated_page_elements):
-                            if element.get('objectId') == new_image_object_id:
+                            if element.get("objectId") == new_image_object_id:
                                 current_index = idx
                                 break
 
@@ -1823,23 +2318,33 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
                                 # Use SEND_BACKWARD the required number of times
                                 order_requests = []
                                 for _ in range(positions_to_move):
-                                    order_requests.append({
-                                        'updatePageElementsZOrder': {
-                                            'pageElementObjectIds': [new_image_object_id],
-                                            'operation': 'SEND_BACKWARD'
+                                    order_requests.append(
+                                        {
+                                            "updatePageElementsZOrder": {
+                                                "pageElementObjectIds": [
+                                                    new_image_object_id
+                                                ],
+                                                "operation": "SEND_BACKWARD",
+                                            }
                                         }
-                                    })
+                                    )
 
                                 def execute_order_update():
-                                    return slides_service.presentations().batchUpdate(
-                                        presentationId=presentation_id,
-                                        body={'requests': order_requests}
-                                    ).execute()
+                                    return (
+                                        slides_service.presentations()
+                                        .batchUpdate(
+                                            presentationId=presentation_id,
+                                            body={"requests": order_requests},
+                                        )
+                                        .execute()
+                                    )
 
                                 try:
                                     retry_with_exponential_backoff(execute_order_update)
                                 except HttpError as order_error:
-                                    print(f"  ⚠️  Warning: Could not restore z-order position: {order_error}")
+                                    print(
+                                        f"  ⚠️  Warning: Could not restore z-order position: {order_error}"
+                                    )
                         break
 
         print(f"    ✓ Replaced textbox with image in slide {slide_number}")
@@ -1851,18 +2356,31 @@ def replace_textbox_with_image(presentation_id, slide_id, slide_number, textbox_
         # Always revoke the temporary public permission, whether insertion succeeded or failed
         if had_public_permission and permission_id and not is_url:
             try:
-                drive_service.permissions().delete(
-                    fileId=image_url_or_file_id,
-                    permissionId=permission_id,
-                    supportsAllDrives=True
-                ).execute()
-                print(f"    ℹ️  Revoked temporary public access from image file")
+
+                def _revoke_permission():
+                    return (
+                        drive_service.permissions()
+                        .delete(
+                            fileId=image_url_or_file_id,
+                            permissionId=permission_id,
+                            supportsAllDrives=True,
+                        )
+                        .execute()
+                    )
+
+                retry_with_exponential_backoff(_revoke_permission)
+                print("    ℹ️  Revoked temporary public access from image file")
             except HttpError as revoke_error:
-                print(f"    ⚠️  Warning: Could not revoke temporary public access: {revoke_error}. \n You should manually revoke the public access from the file.")
+                print(
+                    f"    ⚠️  Warning: Could not revoke temporary public access: {revoke_error}. \n You should manually revoke the public access from the file."
+                )
                 print(f"      File id: {image_url_or_file_id}")
                 print(f"      Permission id: {permission_id}")
 
-def replace_multiple_placeholders_in_textbox(presentation_id, slide_number, textbox_element, placeholder_map, creds):
+
+def replace_multiple_placeholders_in_textbox(
+    presentation_id, slide_number, textbox_element, placeholder_map, creds
+):
     """
     Replace multiple placeholders in a single textbox efficiently.
     Preserves the text style from each deleted placeholder text.
@@ -1878,25 +2396,31 @@ def replace_multiple_placeholders_in_textbox(presentation_id, slide_number, text
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = build('slides', 'v1', credentials=creds)
+    slides_service = build("slides", "v1", credentials=creds)
 
-    shape_id = textbox_element.get('objectId')
+    shape_id = textbox_element.get("objectId")
 
     # Find the exact range of all placeholders in the text
-    text_content = textbox_element['shape']['text']
-    text_elements = text_content.get('textElements', [])
+    text_content = textbox_element["shape"]["text"]
+    text_elements = text_content.get("textElements", [])
 
     # Build full text to find placeholder positions
-    full_text = ''
+    full_text = ""
     for element in text_elements:
-        if 'textRun' in element:
-            full_text += element['textRun'].get('content', '')
+        if "textRun" in element:
+            full_text += element["textRun"].get("content", "")
 
     # Whitelist of writable text style fields
     writable_text_style_fields = [
-        'bold', 'italic', 'underline', 'strikethrough',
-        'fontFamily', 'fontSize', 'foregroundColor', 'backgroundColor',
-        'weightedFontFamily'  # Font weight (object with fontFamily and weight)
+        "bold",
+        "italic",
+        "underline",
+        "strikethrough",
+        "fontFamily",
+        "fontSize",
+        "foregroundColor",
+        "backgroundColor",
+        "weightedFontFamily",  # Font weight (object with fontFamily and weight)
     ]
 
     # Helper function to filter text style to only writable fields
@@ -1914,14 +2438,17 @@ def replace_multiple_placeholders_in_textbox(presentation_id, slide_number, text
     def get_style_at_position(position):
         """Extract text style from the textRun at the given position."""
         for element in text_elements:
-            if 'textRun' in element:
-                element_start = element.get('startIndex', 0)
-                element_end = element.get('endIndex', element_start + len(element['textRun'].get('content', '')))
+            if "textRun" in element:
+                element_start = element.get("startIndex", 0)
+                element_end = element.get(
+                    "endIndex",
+                    element_start + len(element["textRun"].get("content", "")),
+                )
 
                 # Check if this textRun overlaps with the position
                 if element_start <= position < element_end:
-                    text_run = element['textRun']
-                    return text_run.get('style', {})
+                    text_run = element["textRun"]
+                    return text_run.get("style", {})
         return {}
 
     # Find all placeholders and their positions
@@ -1939,76 +2466,85 @@ def replace_multiple_placeholders_in_textbox(presentation_id, slide_number, text
             placeholder_style = get_style_at_position(pos)
             filtered_style = filter_text_style(placeholder_style)
 
-            placeholder_positions.append({
-                'placeholder': placeholder_text,
-                'replacement': replacement_text,
-                'start': pos,
-                'end': pos + len(placeholder_text),
-                'style': filtered_style
-            })
+            placeholder_positions.append(
+                {
+                    "placeholder": placeholder_text,
+                    "replacement": replacement_text,
+                    "start": pos,
+                    "end": pos + len(placeholder_text),
+                    "style": filtered_style,
+                }
+            )
             start_pos = pos + 1
 
     if not placeholder_positions:
         return False
 
     # Sort by position in reverse order (end to start) to maintain indices during replacement
-    placeholder_positions.sort(key=lambda x: x['start'], reverse=True)
+    placeholder_positions.sort(key=lambda x: x["start"], reverse=True)
 
     # Build batch requests for all replacements
     requests = []
     for placeholder_info in placeholder_positions:
-        placeholder_text = placeholder_info['placeholder']
-        replacement_text = placeholder_info['replacement']
-        start_index = placeholder_info['start']
-        end_index = placeholder_info['end']
-        filtered_style = placeholder_info['style']
+        placeholder_text = placeholder_info["placeholder"]
+        replacement_text = placeholder_info["replacement"]
+        start_index = placeholder_info["start"]
+        end_index = placeholder_info["end"]
+        filtered_style = placeholder_info["style"]
 
         # Delete the placeholder text and insert replacement text
-        requests.append({
-            'deleteText': {
-                'objectId': shape_id,
-                'textRange': {
-                    'type': 'FIXED_RANGE',
-                    'startIndex': start_index,
-                    'endIndex': end_index
+        requests.append(
+            {
+                "deleteText": {
+                    "objectId": shape_id,
+                    "textRange": {
+                        "type": "FIXED_RANGE",
+                        "startIndex": start_index,
+                        "endIndex": end_index,
+                    },
                 }
             }
-        })
-        requests.append({
-            'insertText': {
-                'objectId': shape_id,
-                'insertionIndex': start_index,
-                'text': replacement_text
+        )
+        requests.append(
+            {
+                "insertText": {
+                    "objectId": shape_id,
+                    "insertionIndex": start_index,
+                    "text": replacement_text,
+                }
             }
-        })
+        )
 
         # If we have a style to apply, add an updateTextStyle request
         if filtered_style:
             replacement_end = start_index + len(replacement_text)
-            requests.append({
-                'updateTextStyle': {
-                    'objectId': shape_id,
-                    'textRange': {
-                        'type': 'FIXED_RANGE',
-                        'startIndex': start_index,
-                        'endIndex': replacement_end
-                    },
-                    'style': filtered_style,
-                    'fields': ','.join(filtered_style.keys())
+            requests.append(
+                {
+                    "updateTextStyle": {
+                        "objectId": shape_id,
+                        "textRange": {
+                            "type": "FIXED_RANGE",
+                            "startIndex": start_index,
+                            "endIndex": replacement_end,
+                        },
+                        "style": filtered_style,
+                        "fields": ",".join(filtered_style.keys()),
+                    }
                 }
-            })
+            )
 
     # Execute the batch update with retry logic
-    body = {'requests': requests}
+    body = {"requests": requests}
 
     def execute_batch_update():
-        return slides_service.presentations().batchUpdate(
-            presentationId=presentation_id,
-            body=body
-        ).execute()
+        return (
+            slides_service.presentations()
+            .batchUpdate(presentationId=presentation_id, body=body)
+            .execute()
+        )
 
     try:
-        response = retry_with_exponential_backoff(execute_batch_update)
+        retry_with_exponential_backoff(execute_batch_update)
         replaced_count = len(placeholder_positions)
         print(f"  ✓ Replaced {replaced_count} placeholder(s) in slide {slide_number}")
         return True
@@ -2016,13 +2552,16 @@ def replace_multiple_placeholders_in_textbox(presentation_id, slide_number, text
         print(f"Error replacing multiple placeholders in slide {slide_number}: {error}")
         return False
 
-def populate_table_with_data(slides_service, presentation_id, slide_number, table_element, table_data):
+
+def populate_table_with_data(
+    slides_service, presentation_id, slide_number, table_element, table_data
+):
     """
     Populate a Slides table element with data while preserving existing text formatting.
     """
-    table = table_element.get('table', {})
-    table_id = table_element.get('objectId')
-    table_rows = table.get('tableRows', [])
+    table = table_element.get("table", {})
+    table_id = table_element.get("objectId")
+    table_rows = table.get("tableRows", [])
 
     if not table_rows or not table_id:
         print(f"  ⚠️  Table on slide {slide_number} has no rows or objectId, skipping")
@@ -2031,7 +2570,7 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
     num_rows = len(table_rows)
     num_cols = 0
     for row in table_rows:
-        num_cols = max(num_cols, len(row.get('tableCells', [])))
+        num_cols = max(num_cols, len(row.get("tableCells", [])))
 
     if num_cols == 0:
         print(f"  ⚠️  Table on slide {slide_number} has no columns, skipping")
@@ -2044,7 +2583,9 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
     # If we need more rows, add them before populating
     if data_rows > num_rows:
         rows_to_add = data_rows - num_rows
-        print(f"  ℹ️  Adding {rows_to_add} row(s) to table on slide {slide_number} to accommodate data")
+        print(
+            f"  ℹ️  Adding {rows_to_add} row(s) to table on slide {slide_number} to accommodate data"
+        )
 
         # Google Slides API limits: max 20 rows per insertTableRows request
         max_rows_per_request = 20
@@ -2057,22 +2598,26 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
                 rows_in_batch = min(remaining_rows, max_rows_per_request)
 
                 insert_request = {
-                    'insertTableRows': {
-                        'tableObjectId': table_id,
-                        'cellLocation': {
-                            'rowIndex': current_row_index,
-                            'columnIndex': 0
+                    "insertTableRows": {
+                        "tableObjectId": table_id,
+                        "cellLocation": {
+                            "rowIndex": current_row_index,
+                            "columnIndex": 0,
                         },
-                        'insertBelow': True,
-                        'number': rows_in_batch
+                        "insertBelow": True,
+                        "number": rows_in_batch,
                     }
                 }
 
                 def execute_insert_rows():
-                    return slides_service.presentations().batchUpdate(
-                        presentationId=presentation_id,
-                        body={'requests': [insert_request]}
-                    ).execute()
+                    return (
+                        slides_service.presentations()
+                        .batchUpdate(
+                            presentationId=presentation_id,
+                            body={"requests": [insert_request]},
+                        )
+                        .execute()
+                    )
 
                 retry_with_exponential_backoff(execute_insert_rows)
 
@@ -2088,13 +2633,21 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
 
     # Warn if data has more columns than table (we can't add columns easily)
     if data_cols > num_cols:
-        print(f"  ⚠️  Table data for slide {slide_number} has more columns ({data_cols}) than the table ({num_cols}). Extra columns will be ignored.")
+        print(
+            f"  ⚠️  Table data for slide {slide_number} has more columns ({data_cols}) than the table ({num_cols}). Extra columns will be ignored."
+        )
 
     # Reuse the first available text style in a cell so formatting stays consistent
     writable_text_style_fields = [
-        'bold', 'italic', 'underline', 'strikethrough',
-        'fontFamily', 'fontSize', 'foregroundColor', 'backgroundColor',
-        'weightedFontFamily'
+        "bold",
+        "italic",
+        "underline",
+        "strikethrough",
+        "fontFamily",
+        "fontSize",
+        "foregroundColor",
+        "backgroundColor",
+        "weightedFontFamily",
     ]
 
     def filter_text_style(text_style):
@@ -2107,10 +2660,10 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
         return filtered
 
     def get_first_text_style(cell):
-        text_elements = cell.get('text', {}).get('textElements', [])
+        text_elements = cell.get("text", {}).get("textElements", [])
         for element in text_elements:
-            if 'textRun' in element:
-                style = element['textRun'].get('style', {})
+            if "textRun" in element:
+                style = element["textRun"].get("style", {})
                 filtered = filter_text_style(style)
                 if filtered:
                     return filtered
@@ -2120,10 +2673,10 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
         """Check if a cell has any text content."""
         if not cell:
             return False
-        text_elements = cell.get('text', {}).get('textElements', [])
+        text_elements = cell.get("text", {}).get("textElements", [])
         for element in text_elements:
-            if 'textRun' in element:
-                content = element['textRun'].get('content', '')
+            if "textRun" in element:
+                content = element["textRun"].get("content", "")
                 if content and content.strip():
                     return True
         return False
@@ -2132,7 +2685,7 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
     reference_text_style = {}
     if table_rows:
         last_row = table_rows[-1]
-        last_row_cells = last_row.get('tableCells', [])
+        last_row_cells = last_row.get("tableCells", [])
         if last_row_cells:
             reference_text_style = get_first_text_style(last_row_cells[0])
 
@@ -2141,7 +2694,7 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
         # Get row cells if this is an existing row
         row_cells = []
         if r < len(table_rows):
-            row_cells = table_rows[r].get('tableCells', [])
+            row_cells = table_rows[r].get("tableCells", [])
 
         for c in range(num_cols):
             # Skip if column doesn't exist in this row
@@ -2154,9 +2707,9 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
                 cell = row_cells[c]
 
             # Get value from data
-            value = ''
+            value = ""
             if r < len(table_data) and c < len(table_data[r]):
-                value = str(table_data[r][c]) if table_data[r][c] is not None else ''
+                value = str(table_data[r][c]) if table_data[r][c] is not None else ""
 
             # Use cell style if available (existing rows), otherwise use reference style (new rows)
             if cell:
@@ -2167,48 +2720,45 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
             # Clear existing text only if cell has text content
             # Skip deleteText for empty cells to avoid API errors
             if cell and cell_has_text(cell):
-                requests.append({
-                    'deleteText': {
-                        'objectId': table_id,
-                        'cellLocation': {
-                            'rowIndex': r,
-                            'columnIndex': c
-                        },
-                        'textRange': {'type': 'ALL'}
+                requests.append(
+                    {
+                        "deleteText": {
+                            "objectId": table_id,
+                            "cellLocation": {"rowIndex": r, "columnIndex": c},
+                            "textRange": {"type": "ALL"},
+                        }
                     }
-                })
+                )
 
             # Insert new value (skip insert for empty strings)
             if value:
-                requests.append({
-                    'insertText': {
-                        'objectId': table_id,
-                        'cellLocation': {
-                            'rowIndex': r,
-                            'columnIndex': c
-                        },
-                        'insertionIndex': 0,
-                        'text': value
+                requests.append(
+                    {
+                        "insertText": {
+                            "objectId": table_id,
+                            "cellLocation": {"rowIndex": r, "columnIndex": c},
+                            "insertionIndex": 0,
+                            "text": value,
+                        }
                     }
-                })
+                )
 
                 if text_style:
-                    requests.append({
-                        'updateTextStyle': {
-                            'objectId': table_id,
-                            'cellLocation': {
-                                'rowIndex': r,
-                                'columnIndex': c
-                            },
-                            'textRange': {
-                                'type': 'FIXED_RANGE',
-                                'startIndex': 0,
-                                'endIndex': len(value)
-                            },
-                            'style': text_style,
-                            'fields': ','.join(text_style.keys())
+                    requests.append(
+                        {
+                            "updateTextStyle": {
+                                "objectId": table_id,
+                                "cellLocation": {"rowIndex": r, "columnIndex": c},
+                                "textRange": {
+                                    "type": "FIXED_RANGE",
+                                    "startIndex": 0,
+                                    "endIndex": len(value),
+                                },
+                                "style": text_style,
+                                "fields": ",".join(text_style.keys()),
+                            }
                         }
-                    })
+                    )
 
     if not requests:
         return True
@@ -2217,17 +2767,35 @@ def populate_table_with_data(slides_service, presentation_id, slide_number, tabl
     batch_size = 50
     try:
         for i in range(0, len(requests), batch_size):
-            slides_service.presentations().batchUpdate(
-                presentationId=presentation_id,
-                body={'requests': requests[i:i + batch_size]}
-            ).execute()
+
+            def _batch_update_table():
+                return (
+                    slides_service.presentations()
+                    .batchUpdate(
+                        presentationId=presentation_id,
+                        body={"requests": requests[i : i + batch_size]},
+                    )
+                    .execute()
+                )
+
+            retry_with_exponential_backoff(_batch_update_table)
         print(f"  ✓ Populated table on slide {slide_number}")
         return True
     except HttpError as error:
         print(f"  ⚠️  Error populating table on slide {slide_number}: {error}")
         return False
 
-def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_name, data_sheet, entity_folder_id, creds, slides: Optional[Set[int]] = None):
+
+def process_all_slides(
+    presentation_id,
+    sheet_mappings,
+    spreadsheet_id,
+    entity_name,
+    data_sheet,
+    entity_folder_id,
+    creds,
+    slides: Optional[Set[int]] = None,
+):
     """
     Process all slides in the presentation, replacing placeholders based on sheet mappings.
 
@@ -2244,57 +2812,68 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = build('slides', 'v1', credentials=creds)
+    slides_service = build("slides", "v1", credentials=creds)
 
     try:
         # Get the presentation
-        presentation = slides_service.presentations().get(presentationId=presentation_id).execute()
-        presentation_slides = presentation.get('slides', [])
+        def _get_presentation_process():
+            return (
+                slides_service.presentations()
+                .get(presentationId=presentation_id)
+                .execute()
+            )
+
+        presentation = retry_with_exponential_backoff(_get_presentation_process)
+        presentation_slides = presentation.get("slides", [])
 
         # Build lookup dictionaries keyed by placeholder name
         chart_mapping_by_name = {}
         table_mapping_by_name = {}
         for mapping in sheet_mappings:
-            placeholder_type = mapping['placeholder_type']
-            placeholder_name = mapping['placeholder_name']
-            if placeholder_type == 'chart':
+            placeholder_type = mapping["placeholder_type"]
+            placeholder_name = mapping["placeholder_name"]
+            if placeholder_type == "chart":
                 chart_mapping_by_name[f"chart-{placeholder_name}"] = mapping
-            elif placeholder_type == 'table':
+            elif placeholder_type == "table":
                 table_mapping_by_name[placeholder_name] = mapping
 
         # Text placeholder to look for
         entity_placeholder = "{{entity_name}}"
-        table_placeholder_pattern = r'^\{\{table-([^}]+)\}\}$'
+        table_placeholder_pattern = r"^\{\{table-([^}]+)\}\}$"
         table_data_cache = {}
         table_decisions = {}
 
         # Loop through all slides
         for slide_index, slide in enumerate(presentation_slides):
-            slide_number = slide_index + 1  # 1-based slide number (used only for messaging)
+            slide_number = (
+                slide_index + 1
+            )  # 1-based slide number (used only for messaging)
 
             if slides and slide_number not in slides:
-                print(f"\nSkipping slide {slide_number} (not requested)")
+                print(f"Skipping slide {slide_number} (not requested)")
                 continue
 
-            slide_id = slide.get('objectId')
+            slide_id = slide.get("objectId")
 
+            # Track slide processing time (only if slide is being processed)
+            slide_start_time = time.time()
             print(f"Processing slide {slide_number}:")
 
             # Loop through all elements in the slide
-            for page_element in slide.get('pageElements', []):
+            for page_element in slide.get("pageElements", []):
                 # Process tables first
-                if 'table' in page_element:
-                    table_obj = page_element.get('table', {})
-                    table_rows = table_obj.get('tableRows', [])
-                    if not table_rows or not table_rows[0].get('tableCells'):
+                if "table" in page_element:
+                    table_obj = page_element.get("table", {})
+                    table_rows = table_obj.get("tableRows", [])
+                    if not table_rows or not table_rows[0].get("tableCells"):
                         continue
 
-                    first_cell = table_rows[0].get('tableCells')[0]
-                    text_elements = first_cell.get('text', {}).get('textElements', [])
-                    top_left_text = ''
+                    first_cell = table_rows[0].get("tableCells")[0]
+                    text_elements = first_cell.get("text", {}).get("textElements", [])
+                    top_left_text = ""
                     for element in text_elements:
-                        if 'textRun' in element:
-                            top_left_text += element['textRun'].get('content', '')
+                        if "textRun" in element:
+                            top_left_text += element["textRun"].get("content", "")
                     top_left_text = top_left_text.strip()
 
                     table_match = re.match(table_placeholder_pattern, top_left_text)
@@ -2303,23 +2882,37 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
 
                     table_name = table_match.group(1).strip()
                     mapping = table_mapping_by_name.get(table_name)
-                    sheet_name = mapping['sheet_name'] if mapping else f"table-{table_name}"
+                    sheet_name = (
+                        mapping["sheet_name"] if mapping else f"table-{table_name}"
+                    )
 
                     if table_name not in table_data_cache:
-                        table_values = read_table_from_sheet(spreadsheet_id, sheet_name, creds)
+                        table_values = read_table_from_sheet(
+                            spreadsheet_id, sheet_name, creds
+                        )
                         table_data_cache[table_name] = table_values
                     else:
                         # Duplicate reference detected
                         if table_name not in table_decisions:
-                            response = input(f"Multiple references to table '{table_name}' detected. Continue replacing everywhere? [y/N]: ").strip().lower()
-                            table_decisions[table_name] = response in ('y', 'yes')
+                            response = (
+                                input(
+                                    f"Multiple references to table '{table_name}' detected. Continue replacing everywhere? [y/N]: "
+                                )
+                                .strip()
+                                .lower()
+                            )
+                            table_decisions[table_name] = response in ("y", "yes")
                         if not table_decisions.get(table_name, False):
-                            print(f"  ✗ Stopping at duplicate table '{table_name}' per user choice.")
+                            print(
+                                f"  ✗ Stopping at duplicate table '{table_name}' per user choice."
+                            )
                             return False
                         table_values = table_data_cache[table_name]
 
                     if table_values is None:
-                        print(f"  ⚠️  Skipping table '{table_name}' on slide {slide_number} due to missing data")
+                        print(
+                            f"  ⚠️  Skipping table '{table_name}' on slide {slide_number} due to missing data"
+                        )
                         continue
 
                     success = populate_table_with_data(
@@ -2327,26 +2920,28 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
                         presentation_id=presentation_id,
                         slide_number=slide_number,
                         table_element=page_element,
-                        table_data=table_values
+                        table_data=table_values,
                     )
                     if not success:
-                        print(f"  ⚠️  Failed to populate table '{table_name}' on slide {slide_number}")
+                        print(
+                            f"  ⚠️  Failed to populate table '{table_name}' on slide {slide_number}"
+                        )
                     continue
 
                 # Only process text elements (shapes with text)
-                if 'shape' in page_element and 'text' in page_element['shape']:
-                    text_content = page_element['shape']['text'].get('textElements', [])
-                    full_text = ''
+                if "shape" in page_element and "text" in page_element["shape"]:
+                    text_content = page_element["shape"]["text"].get("textElements", [])
+                    full_text = ""
 
                     # Build full text from all text elements
                     for element in text_content:
-                        if 'textRun' in element:
-                            full_text += element['textRun'].get('content', '')
+                        if "textRun" in element:
+                            full_text += element["textRun"].get("content", "")
 
                     full_text_stripped = full_text.strip()
 
                     # Check for chart placeholders: {{chart-placeholder_name}} format
-                    chart_pattern = r'\{\{(chart-[^}]+)\}\}'
+                    chart_pattern = r"\{\{(chart-[^}]+)\}\}"
                     chart_match = re.match(chart_pattern, full_text_stripped)
                     if chart_match:
                         placeholder_name = chart_match.group(1).strip()
@@ -2358,17 +2953,21 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
                                 slide_number=slide_number,
                                 textbox_element=page_element,
                                 spreadsheet_id=spreadsheet_id,
-                                sheet_name=mapping['sheet_name'],
-                                creds=creds
+                                sheet_name=mapping["sheet_name"],
+                                creds=creds,
                             )
                             if not success:
-                                print(f"  ⚠️  Failed to replace chart placeholder: {placeholder_name}")
+                                print(
+                                    f"  ⚠️  Failed to replace chart placeholder: {placeholder_name}"
+                                )
                         else:
-                            print(f"  ⚠️  No mapping found for chart placeholder: {placeholder_name} in slide {slide_number}")
+                            print(
+                                f"  ⚠️  No mapping found for chart placeholder: {placeholder_name} in slide {slide_number}"
+                            )
                         continue  # Skip further processing for chart placeholders
 
                     # Check for {{picture-placeholder_name}} format and replace with image
-                    picture_pattern = r'\{\{picture-([^}]+)\}\}'
+                    picture_pattern = r"\{\{picture-([^}]+)\}\}"
                     picture_match = re.search(picture_pattern, full_text)
                     if picture_match:
                         placeholder_name = picture_match.group(1).strip()
@@ -2376,7 +2975,7 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
                         image_url_or_file_id = get_image_file_from_folder(
                             entity_folder_id=entity_folder_id,
                             picture_name=placeholder_name,
-                            creds=creds
+                            creds=creds,
                         )
                         if image_url_or_file_id:
                             # Replace textbox with image
@@ -2386,12 +2985,16 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
                                 slide_number=slide_number,
                                 textbox_element=page_element,
                                 image_url_or_file_id=image_url_or_file_id,
-                                creds=creds
+                                creds=creds,
                             )
                             if not success:
-                                print(f"  ⚠️  Failed to replace picture placeholder: {placeholder_name}")
+                                print(
+                                    f"  ⚠️  Failed to replace picture placeholder: {placeholder_name}"
+                                )
                         else:
-                            print(f"  ⚠️  No image found matching 'picture-{placeholder_name}' in entity folder")
+                            print(
+                                f"  ⚠️  No image found matching 'picture-{placeholder_name}' in entity folder"
+                            )
                         continue  # Skip further processing for picture placeholders
 
                     # Collect all placeholders to replace (entity_name + data sheet placeholders)
@@ -2403,12 +3006,15 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
 
                     # Check if there's a data sheet for this slide and add data placeholders
                     if data_sheet:
-                        placeholder_pattern = r'\{\{([^}]+)\}\}'
+                        placeholder_pattern = r"\{\{([^}]+)\}\}"
                         found_placeholders = re.findall(placeholder_pattern, full_text)
 
                         for placeholder_name in found_placeholders:
                             full_placeholder = f"{{{{{placeholder_name}}}}}"
-                            if placeholder_name != 'entity_name' and placeholder_name in data_sheet:
+                            if (
+                                placeholder_name != "entity_name"
+                                and placeholder_name in data_sheet
+                            ):
                                 replacement_value = data_sheet[placeholder_name]
                                 placeholder_map[full_placeholder] = replacement_value
 
@@ -2419,10 +3025,16 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
                             slide_number=slide_number,
                             textbox_element=page_element,
                             placeholder_map=placeholder_map,
-                            creds=creds
+                            creds=creds,
                         )
                         if not success:
-                            print(f"  ⚠️  Failed to replace placeholders in slide {slide_number}")
+                            print(
+                                f"  ⚠️  Failed to replace placeholders in slide {slide_number}"
+                            )
+
+            # Report slide processing time
+            slide_elapsed = time.time() - slide_start_time
+            print(f"Slide {slide_number} processing time: {slide_elapsed:.2f} seconds")
 
         return True
 
@@ -2430,7 +3042,16 @@ def process_all_slides(presentation_id, sheet_mappings, spreadsheet_id, entity_n
         print(f"Error processing slides: {error}")
         return False
 
-def process_spreadsheet(spreadsheet_id, spreadsheet_name, template_id, output_folder_id, entity_folder_id, creds, slides: Optional[Set[int]] = None):
+
+def process_spreadsheet(
+    spreadsheet_id,
+    spreadsheet_name,
+    template_id,
+    output_folder_id,
+    entity_folder_id,
+    creds,
+    slides: Optional[Set[int]] = None,
+):
     """
     Process a spreadsheet to generate a Google Slides presentation.
 
@@ -2465,12 +3086,16 @@ def process_spreadsheet(spreadsheet_id, spreadsheet_name, template_id, output_fo
             parsed = parse_sheet_name(sheet_name)
             if parsed:
                 placeholder_type, placeholder_name = parsed
-                sheet_mappings.append({
-                    'sheet_name': sheet_name,
-                    'placeholder_type': placeholder_type,
-                    'placeholder_name': placeholder_name
-                })
-                print(f"  Found: {sheet_name} -> Type: {placeholder_type}, Placeholder: {placeholder_name}")
+                sheet_mappings.append(
+                    {
+                        "sheet_name": sheet_name,
+                        "placeholder_type": placeholder_type,
+                        "placeholder_name": placeholder_name,
+                    }
+                )
+                print(
+                    f"  Found: {sheet_name} -> Type: {placeholder_type}, Placeholder: {placeholder_name}"
+                )
 
         if not sheet_mappings:
             print("⚠️  No sheets matching the pattern <type>:<placeholder> found!")
@@ -2482,7 +3107,9 @@ def process_spreadsheet(spreadsheet_id, spreadsheet_name, template_id, output_fo
         try:
             data_sheet = read_data_from_sheet(spreadsheet_id, "data", creds)
             if data_sheet:
-                print(f"  Loaded {len(data_sheet)} placeholder(s): {', '.join(data_sheet.keys())}")
+                print(
+                    f"  Loaded {len(data_sheet)} placeholder(s): {', '.join(data_sheet.keys())}"
+                )
             else:
                 print("  ⚠️  No data found in 'data' sheet")
         except Exception as e:
@@ -2492,10 +3119,16 @@ def process_spreadsheet(spreadsheet_id, spreadsheet_name, template_id, output_fo
         incremental_update = slides is not None
 
         if incremental_update:
-            print("Checking for existing presentation (incremental slide regeneration)...")
-            presentation_id = find_existing_presentation(entity_name, output_folder_id, creds)
+            print(
+                "Checking for existing presentation (incremental slide regeneration)..."
+            )
+            presentation_id = find_existing_presentation(
+                entity_name, output_folder_id, creds
+            )
             if presentation_id:
-                print(f"  ✓ Using existing presentation: {entity_name}.gslides (ID: {presentation_id})")
+                print(
+                    f"  ✓ Using existing presentation: {entity_name}.gslides (ID: {presentation_id})"
+                )
                 try:
                     refreshed = replace_slides_from_template(
                         presentation_id=presentation_id,
@@ -2540,16 +3173,19 @@ def process_spreadsheet(spreadsheet_id, spreadsheet_name, template_id, output_fo
         if not success:
             print("Warning: Some placeholders may not have been replaced successfully")
 
-        print(f"\n{'='*80}")
-        print(f"✓ Presentation created successfully!")
+        print(f"\n{'=' * 80}")
+        print("✓ Presentation created successfully!")
         print(f"  Presentation ID: {presentation_id}")
-        print(f"  View at: https://docs.google.com/presentation/d/{presentation_id}/edit")
-        print(f"{'='*80}")
+        print(
+            f"  View at: https://docs.google.com/presentation/d/{presentation_id}/edit"
+        )
+        print(f"{'=' * 80}")
 
         return presentation_id
 
     except Exception as e:
         print(f"\nError processing spreadsheet: {e}")
         import traceback
+
         traceback.print_exc()
         return None

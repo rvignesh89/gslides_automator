@@ -1,7 +1,16 @@
+# === Python Artefacts ===
 __pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# === Virtual Environments ===
 venv/
-service-account-credentials.json
+
+# === Build Directories ===
 dist/
 build/
-*.egg-info/
+
+# === Credentials & Environment Files ===
+service-account-credentials.json
 .envrc

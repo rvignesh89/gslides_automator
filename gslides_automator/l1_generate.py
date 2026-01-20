@@ -1,32 +1,31 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """
 Script to generate L1-Merged from L0-Raw for entities in Tamil Nadu.
 Reads CSV files and images from L0-Raw folder, clones entity data templates,
 populates Google Sheets tabs with CSV data, and copies images to L1-Merged folder.
 """
 
+from __future__ import annotations
+import sys
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload
+from gslides_automator.drive_layout import DriveLayout
 import gspread
 import os
-import sys
 import time
 import csv
 import io
-import argparse
-import re
 
 # Add project root to path to import auth module
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
 
-from gslides_automator.drive_layout import load_entities, resolve_layout, DriveLayout
-from gslides_automator.auth import get_oauth_credentials
 
-def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_delay=60, backoff_factor=2):
+def retry_with_exponential_backoff(
+    func, max_retries=5, initial_delay=1, max_delay=60, backoff_factor=2
+):
     """
     Retry a function with exponential backoff on 429 (Too Many Requests) and 5xx (Server) errors.
 
@@ -62,7 +61,9 @@ def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_del
                         error_msg = "Rate limit exceeded (429)"
                     else:
                         error_msg = f"Server error ({status})"
-                    print(f"    ⚠️  {error_msg}. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})")
+                    print(
+                        f"    ⚠️  {error_msg}. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})"
+                    )
                     time.sleep(wait_time)
                     delay *= backoff_factor
                 else:
@@ -78,18 +79,23 @@ def retry_with_exponential_backoff(func, max_retries=5, initial_delay=1, max_del
         except Exception as e:
             # For non-HttpError exceptions, check if it's a gspread rate limit error
             error_str = str(e).lower()
-            if '429' in error_str or 'rate limit' in error_str or 'quota' in error_str:
+            if "429" in error_str or "rate limit" in error_str or "quota" in error_str:
                 if attempt < max_retries:
                     wait_time = min(delay, max_delay)
-                    print(f"    ⚠️  Rate limit error. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})")
+                    print(
+                        f"    ⚠️  Rate limit error. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})"
+                    )
                     time.sleep(wait_time)
                     delay *= backoff_factor
                 else:
-                    print(f"    ✗ Rate limit error. Max retries ({max_retries}) reached.")
+                    print(
+                        f"    ✗ Rate limit error. Max retries ({max_retries}) reached."
+                    )
                     raise
             else:
                 # For non-retryable errors, re-raise immediately
                 raise
+
 
 def find_existing_file(drive_service, file_name, folder_id):
     """
@@ -103,17 +109,22 @@ def find_existing_file(drive_service, file_name, folder_id):
     Returns:
         str: File ID if found, None otherwise
     """
+
     def _find():
         query = f"name='{file_name}' and '{folder_id}' in parents and trashed=false"
-        results = drive_service.files().list(
-            q=query,
-            fields="files(id, name)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True
-        ).execute()
-        files = results.get('files', [])
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id, name)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
+        files = results.get("files", [])
         if files:
-            return files[0]['id']
+            return files[0]["id"]
         return None
 
     try:
@@ -121,6 +132,7 @@ def find_existing_file(drive_service, file_name, folder_id):
     except HttpError as error:
         print(f"Error searching for existing file '{file_name}': {error}")
         return None
+
 
 def delete_file(drive_service, file_id):
     """
@@ -135,34 +147,36 @@ def delete_file(drive_service, file_id):
     """
     # First, check if the file exists and is accessible
     try:
-        file_metadata = drive_service.files().get(
-            fileId=file_id,
-            fields='id, name',
-            supportsAllDrives=True
-        ).execute()
-        file_name = file_metadata.get('name', 'Unknown')
+        file_metadata = (
+            drive_service.files()
+            .get(fileId=file_id, fields="id, name", supportsAllDrives=True)
+            .execute()
+        )
+        file_name = file_metadata.get("name", "Unknown")
     except HttpError as check_error:
         if check_error.resp.status == 404:
             # File not found - might not be accessible to service account
             try:
                 from .auth import get_service_account_email
+
                 service_account_email = get_service_account_email()
-                print(f"  ⚠️  File not found or not accessible to service account.")
+                print("  ⚠️  File not found or not accessible to service account.")
                 print(f"      Service account email: {service_account_email}")
-                print(f"      Please ensure the file is shared with this service account with 'Editor' permissions.")
+                print(
+                    "      Please ensure the file is shared with this service account with 'Editor' permissions."
+                )
             except Exception:
-                print(f"  ⚠️  File not found or not accessible to service account.")
-                print(f"      Please ensure the file is shared with your service account with 'Editor' permissions.")
+                print("  ⚠️  File not found or not accessible to service account.")
+                print(
+                    "      Please ensure the file is shared with your service account with 'Editor' permissions."
+                )
             return False
         else:
             print(f"  ⚠️  Error checking file access: {check_error}")
             return False
 
     def _delete():
-        drive_service.files().delete(
-            fileId=file_id,
-            supportsAllDrives=True
-        ).execute()
+        drive_service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
         return True
 
     try:
@@ -171,26 +185,41 @@ def delete_file(drive_service, file_id):
         if error.resp.status == 404:
             try:
                 from .auth import get_service_account_email
+
                 service_account_email = get_service_account_email()
-                print(f"  ⚠️  Error deleting file '{file_name}': File not found or not accessible.")
+                print(
+                    f"  ⚠️  Error deleting file '{file_name}': File not found or not accessible."
+                )
                 print(f"      Service account email: {service_account_email}")
-                print(f"      Please ensure the file is shared with this service account with 'Editor' permissions.")
+                print(
+                    "      Please ensure the file is shared with this service account with 'Editor' permissions."
+                )
             except Exception:
-                print(f"  ⚠️  Error deleting file '{file_name}': File not found or not accessible.")
-                print(f"      Please ensure the file is shared with your service account with 'Editor' permissions.")
+                print(
+                    f"  ⚠️  Error deleting file '{file_name}': File not found or not accessible."
+                )
+                print(
+                    "      Please ensure the file is shared with your service account with 'Editor' permissions."
+                )
         elif error.resp.status == 403:
             try:
                 from .auth import get_service_account_email
+
                 service_account_email = get_service_account_email()
                 print(f"  ⚠️  Error deleting file '{file_name}': Permission denied.")
                 print(f"      Service account email: {service_account_email}")
-                print(f"      Please ensure the file is shared with this service account with 'Editor' permissions.")
+                print(
+                    "      Please ensure the file is shared with this service account with 'Editor' permissions."
+                )
             except Exception:
                 print(f"  ⚠️  Error deleting file '{file_name}': Permission denied.")
-                print(f"      Please ensure the file is shared with your service account with 'Editor' permissions.")
+                print(
+                    "      Please ensure the file is shared with your service account with 'Editor' permissions."
+                )
         else:
             print(f"  ⚠️  Error deleting file '{file_name}': {error}")
         return False
+
 
 def find_or_create_entity_folder(drive_service, entity_name, parent_folder_id):
     """
@@ -204,17 +233,22 @@ def find_or_create_entity_folder(drive_service, entity_name, parent_folder_id):
     Returns:
         str: Folder ID, or None if failed
     """
+
     def _find_folder():
         query = f"mimeType='application/vnd.google-apps.folder' and name='{entity_name}' and '{parent_folder_id}' in parents and trashed=false"
-        results = drive_service.files().list(
-            q=query,
-            fields='files(id, name)',
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True
-        ).execute()
-        files = results.get('files', [])
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id, name)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
+        files = results.get("files", [])
         if files:
-            return files[0]['id']
+            return files[0]["id"]
         return None
 
     try:
@@ -226,22 +260,23 @@ def find_or_create_entity_folder(drive_service, entity_name, parent_folder_id):
         # Create new folder if not found
         def _create_folder():
             file_metadata = {
-                'name': entity_name,
-                'mimeType': 'application/vnd.google-apps.folder',
-                'parents': [parent_folder_id]
+                "name": entity_name,
+                "mimeType": "application/vnd.google-apps.folder",
+                "parents": [parent_folder_id],
             }
-            folder = drive_service.files().create(
-                body=file_metadata,
-                fields='id',
-                supportsAllDrives=True
-            ).execute()
-            return folder.get('id')
+            folder = (
+                drive_service.files()
+                .create(body=file_metadata, fields="id", supportsAllDrives=True)
+                .execute()
+            )
+            return folder.get("id")
 
         folder_id = retry_with_exponential_backoff(_create_folder)
         return folder_id
     except HttpError as error:
         print(f"Error finding/creating entity folder '{entity_name}': {error}")
         return None
+
 
 def clone_template_to_entity(drive_service, template_id, entity_name, folder_id):
     """
@@ -261,30 +296,30 @@ def clone_template_to_entity(drive_service, template_id, entity_name, folder_id)
     # Check if file already exists
     existing_file_id = find_existing_file(drive_service, file_name, folder_id)
     if existing_file_id:
-        print(f"  Found existing spreadsheet, deleting...")
+        print("  Found existing spreadsheet, deleting...")
         if delete_file(drive_service, existing_file_id):
-            print(f"  ✓ Deleted existing spreadsheet")
+            print("  ✓ Deleted existing spreadsheet")
         else:
-            print(f"  ✗ Failed to delete existing spreadsheet")
+            print("  ✗ Failed to delete existing spreadsheet")
             return None
 
     def _copy_template():
         # Copy the template
-        copied_file = drive_service.files().copy(
-            fileId=template_id,
-            body={'name': file_name},
-            supportsAllDrives=True
-        ).execute()
+        copied_file = (
+            drive_service.files()
+            .copy(fileId=template_id, body={"name": file_name}, supportsAllDrives=True)
+            .execute()
+        )
 
-        new_file_id = copied_file.get('id')
+        new_file_id = copied_file.get("id")
 
         # Move to target folder
-        file_metadata = drive_service.files().get(
-            fileId=new_file_id,
-            fields='parents',
-            supportsAllDrives=True
-        ).execute()
-        previous_parents = ",".join(file_metadata.get('parents', []))
+        file_metadata = (
+            drive_service.files()
+            .get(fileId=new_file_id, fields="parents", supportsAllDrives=True)
+            .execute()
+        )
+        previous_parents = ",".join(file_metadata.get("parents", []))
 
         # Move the file to the target folder
         if previous_parents:
@@ -292,15 +327,15 @@ def clone_template_to_entity(drive_service, template_id, entity_name, folder_id)
                 fileId=new_file_id,
                 addParents=folder_id,
                 removeParents=previous_parents,
-                fields='id, parents',
-                supportsAllDrives=True
+                fields="id, parents",
+                supportsAllDrives=True,
             ).execute()
         else:
             drive_service.files().update(
                 fileId=new_file_id,
                 addParents=folder_id,
-                fields='id, parents',
-                supportsAllDrives=True
+                fields="id, parents",
+                supportsAllDrives=True,
             ).execute()
 
         return new_file_id
@@ -310,12 +345,17 @@ def clone_template_to_entity(drive_service, template_id, entity_name, folder_id)
         return new_file_id
     except HttpError as error:
         if error.resp.status == 404:
-            print(f"Error: Template file not found (404). The file may have been deleted or you don't have access.")
+            print(
+                "Error: Template file not found (404). The file may have been deleted or you don't have access."
+            )
         elif error.resp.status == 403:
-            print(f"Error: Permission denied (403). You may not have permission to copy this file.")
+            print(
+                "Error: Permission denied (403). You may not have permission to copy this file."
+            )
         else:
             print(f"Error copying template: {error}")
         return None
+
 
 def list_csv_files_in_folder(drive_service, folder_id):
     """
@@ -328,23 +368,29 @@ def list_csv_files_in_folder(drive_service, folder_id):
     Returns:
         list: List of tuples (file_id, file_name)
     """
+
     def _list_files():
         query = f"mimeType='text/csv' and '{folder_id}' in parents and trashed=false"
-        results = drive_service.files().list(
-            q=query,
-            fields='files(id, name)',
-            pageSize=1000,
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True
-        ).execute()
-        files = results.get('files', [])
-        return [(f['id'], f['name']) for f in files]
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id, name)",
+                pageSize=1000,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
+        files = results.get("files", [])
+        return [(f["id"], f["name"]) for f in files]
 
     try:
         return retry_with_exponential_backoff(_list_files)
     except HttpError as error:
         print(f"Error listing CSV files in folder: {error}")
         return []
+
 
 def download_csv_from_drive(drive_service, file_id):
     """
@@ -357,6 +403,7 @@ def download_csv_from_drive(drive_service, file_id):
     Returns:
         list: List of rows (each row is a list of values), or None if failed
     """
+
     def _download():
         request = drive_service.files().get_media(fileId=file_id)
         file_content = io.BytesIO()
@@ -366,7 +413,7 @@ def download_csv_from_drive(drive_service, file_id):
             status, done = downloader.next_chunk()
         file_content.seek(0)
         # Decode and parse CSV
-        content_str = file_content.read().decode('utf-8')
+        content_str = file_content.read().decode("utf-8")
         # Use csv.reader with proper settings to preserve data integrity
         csv_reader = csv.reader(io.StringIO(content_str), quoting=csv.QUOTE_MINIMAL)
         rows = list(csv_reader)
@@ -376,7 +423,7 @@ def download_csv_from_drive(drive_service, file_id):
             # Pad rows to have the same number of columns
             normalized_rows = []
             for row in rows:
-                padded_row = row + [''] * (max_cols - len(row))
+                padded_row = row + [""] * (max_cols - len(row))
                 normalized_rows.append(padded_row)
             return normalized_rows
         return rows
@@ -386,6 +433,7 @@ def download_csv_from_drive(drive_service, file_id):
     except HttpError as error:
         print(f"Error downloading CSV file: {error}")
         return None
+
 
 def parse_csv_filename(filename):
     """
@@ -399,9 +447,10 @@ def parse_csv_filename(filename):
         str: Tab name (without .csv extension)
     """
     # Remove .csv extension
-    if filename.endswith('.csv'):
+    if filename.endswith(".csv"):
         return filename[:-4]
     return filename
+
 
 def find_existing_spreadsheet(drive_service, entity_name, folder_id):
     """
@@ -418,6 +467,7 @@ def find_existing_spreadsheet(drive_service, entity_name, folder_id):
     file_name = f"{entity_name}"
     return find_existing_file(drive_service, file_name, folder_id)
 
+
 def _convert_value_to_proper_type(value):
     """
     Convert a CSV string value to its proper type (number, boolean, or string).
@@ -429,15 +479,17 @@ def _convert_value_to_proper_type(value):
     Returns:
         Value converted to appropriate type (int, float, bool, or str)
     """
-    if value is None or value == '':
-        return ''
+    if value is None or value == "":
+        return ""
 
     value_str = str(value).strip()
 
     # Try to convert to number
     try:
         # Try integer first
-        if value_str.isdigit() or (value_str.startswith('-') and value_str[1:].isdigit()):
+        if value_str.isdigit() or (
+            value_str.startswith("-") and value_str[1:].isdigit()
+        ):
             return int(value_str)
         # Try float
         return float(value_str)
@@ -445,11 +497,12 @@ def _convert_value_to_proper_type(value):
         pass
 
     # Try boolean
-    if value_str.lower() in ('true', 'false'):
-        return value_str.lower() == 'true'
+    if value_str.lower() in ("true", "false"):
+        return value_str.lower() == "true"
 
     # Return as string
     return value_str
+
 
 def write_csv_to_sheet_tab(gspread_client, spreadsheet_id, tab_name, csv_data, creds):
     """
@@ -466,15 +519,15 @@ def write_csv_to_sheet_tab(gspread_client, spreadsheet_id, tab_name, csv_data, c
     Returns:
         bool: True if successful, False otherwise
     """
+
     def _write_data():
         # Use Sheets API directly for better control over data types
-        sheets_service = build('sheets', 'v4', credentials=creds)
+        sheets_service = build("sheets", "v4", credentials=creds)
 
         # Get the worksheet ID
         spreadsheet = gspread_client.open_by_key(spreadsheet_id)
         try:
-            worksheet = spreadsheet.worksheet(tab_name)
-            sheet_id = worksheet.id
+            spreadsheet.worksheet(tab_name)
         except gspread.exceptions.WorksheetNotFound:
             print(f"    ⚠️  Tab '{tab_name}' not found in spreadsheet")
             return False
@@ -494,15 +547,13 @@ def write_csv_to_sheet_tab(gspread_client, spreadsheet_id, tab_name, csv_data, c
 
         # Use batchUpdate to write data with proper types
         range_name = f"{tab_name}!A1"
-        body = {
-            'values': values
-        }
+        body = {"values": values}
 
-        result = sheets_service.spreadsheets().values().update(
+        sheets_service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
             range=range_name,
-            valueInputOption='RAW',  # RAW preserves exact values without interpretation
-            body=body
+            valueInputOption="RAW",  # RAW preserves exact values without interpretation
+            body=body,
         ).execute()
 
         return True
@@ -512,6 +563,7 @@ def write_csv_to_sheet_tab(gspread_client, spreadsheet_id, tab_name, csv_data, c
     except Exception as e:
         print(f"    ✗ Error writing data to tab '{tab_name}': {e}")
         return False
+
 
 def list_image_files_in_folder(drive_service, folder_id):
     """
@@ -525,28 +577,32 @@ def list_image_files_in_folder(drive_service, folder_id):
         list: List of tuples (file_id, file_name)
     """
     image_mime_types = [
-        'image/png',
-        'image/jpeg',
-        'image/jpg',
-        'image/gif',
-        'image/bmp',
-        'image/webp',
-        'image/svg+xml'
+        "image/png",
+        "image/jpeg",
+        "image/jpg",
+        "image/gif",
+        "image/bmp",
+        "image/webp",
+        "image/svg+xml",
     ]
 
     mime_query = " or ".join([f"mimeType='{mime}'" for mime in image_mime_types])
 
     def _list_files():
         query = f"'{folder_id}' in parents and trashed=false and ({mime_query})"
-        results = drive_service.files().list(
-            q=query,
-            fields='files(id, name)',
-            pageSize=1000,
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True
-        ).execute()
-        files = results.get('files', [])
-        return [(f['id'], f['name']) for f in files]
+        results = (
+            drive_service.files()
+            .list(
+                q=query,
+                fields="files(id, name)",
+                pageSize=1000,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
+        files = results.get("files", [])
+        return [(f["id"], f["name"]) for f in files]
 
     try:
         return retry_with_exponential_backoff(_list_files)
@@ -554,7 +610,10 @@ def list_image_files_in_folder(drive_service, folder_id):
         print(f"Error listing image files in folder: {error}")
         return []
 
-def copy_image_to_folder(drive_service, source_file_id, destination_folder_id, file_name):
+
+def copy_image_to_folder(
+    drive_service, source_file_id, destination_folder_id, file_name
+):
     """
     Copy image file from source to destination folder, deleting existing if present.
 
@@ -568,32 +627,36 @@ def copy_image_to_folder(drive_service, source_file_id, destination_folder_id, f
         str: ID of the copied file, or None if failed
     """
     # Check if file already exists
-    existing_file_id = find_existing_file(drive_service, file_name, destination_folder_id)
+    existing_file_id = find_existing_file(
+        drive_service, file_name, destination_folder_id
+    )
     if existing_file_id:
         print(f"    Found existing image '{file_name}', deleting...")
         if delete_file(drive_service, existing_file_id):
-            print(f"    ✓ Deleted existing image")
+            print("    ✓ Deleted existing image")
         else:
-            print(f"    ✗ Failed to delete existing image")
+            print("    ✗ Failed to delete existing image")
             return None
 
     def _copy_file():
         # Copy the file
-        copied_file = drive_service.files().copy(
-            fileId=source_file_id,
-            body={'name': file_name},
-            supportsAllDrives=True
-        ).execute()
+        copied_file = (
+            drive_service.files()
+            .copy(
+                fileId=source_file_id, body={"name": file_name}, supportsAllDrives=True
+            )
+            .execute()
+        )
 
-        new_file_id = copied_file.get('id')
+        new_file_id = copied_file.get("id")
 
         # Move to target folder
-        file_metadata = drive_service.files().get(
-            fileId=new_file_id,
-            fields='parents',
-            supportsAllDrives=True
-        ).execute()
-        previous_parents = ",".join(file_metadata.get('parents', []))
+        file_metadata = (
+            drive_service.files()
+            .get(fileId=new_file_id, fields="parents", supportsAllDrives=True)
+            .execute()
+        )
+        previous_parents = ",".join(file_metadata.get("parents", []))
 
         # Move the file to the target folder
         if previous_parents:
@@ -601,15 +664,15 @@ def copy_image_to_folder(drive_service, source_file_id, destination_folder_id, f
                 fileId=new_file_id,
                 addParents=destination_folder_id,
                 removeParents=previous_parents,
-                fields='id, parents',
-                supportsAllDrives=True
+                fields="id, parents",
+                supportsAllDrives=True,
             ).execute()
         else:
             drive_service.files().update(
                 fileId=new_file_id,
                 addParents=destination_folder_id,
-                fields='id, parents',
-                supportsAllDrives=True
+                fields="id, parents",
+                supportsAllDrives=True,
             ).execute()
 
         return new_file_id
@@ -620,6 +683,7 @@ def copy_image_to_folder(drive_service, source_file_id, destination_folder_id, f
     except HttpError as error:
         print(f"    ✗ Error copying image '{file_name}': {error}")
         return None
+
 
 def process_entity(entity_name, creds, layout: DriveLayout):
     """
@@ -633,7 +697,7 @@ def process_entity(entity_name, creds, layout: DriveLayout):
     Returns:
         bool: True if successful, False otherwise
     """
-    drive_service = build('drive', 'v3', credentials=creds)
+    drive_service = build("drive", "v3", credentials=creds)
     gspread_client = gspread.authorize(creds)
 
     l1_root_id = layout.l1_merged_id
@@ -643,7 +707,9 @@ def process_entity(entity_name, creds, layout: DriveLayout):
     try:
         # 1. Find/create L1-Merged entity folder
         print(f"Finding/creating L1-Merged folder for {entity_name}...")
-        l1_folder_id = find_or_create_entity_folder(drive_service, entity_name, l1_root_id)
+        l1_folder_id = find_or_create_entity_folder(
+            drive_service, entity_name, l1_root_id
+        )
         if not l1_folder_id:
             print(f"  ✗ Failed to find/create L1-Merged folder for {entity_name}")
             return False
@@ -651,7 +717,9 @@ def process_entity(entity_name, creds, layout: DriveLayout):
 
         # 2. Find L0-Raw entity folder
         print(f"Finding L0-Raw folder for {entity_name}...")
-        l0_folder_id = find_or_create_entity_folder(drive_service, entity_name, l0_root_id)
+        l0_folder_id = find_or_create_entity_folder(
+            drive_service, entity_name, l0_root_id
+        )
         if not l0_folder_id:
             print(f"  ✗ Failed to find L0-Raw folder for {entity_name}")
             return False
@@ -659,14 +727,16 @@ def process_entity(entity_name, creds, layout: DriveLayout):
 
         # 3. Handle spreadsheet creation/update: always clone template fresh
         print(f"Cloning template spreadsheet for {entity_name}...")
-        spreadsheet_id = clone_template_to_entity(drive_service, template_id, entity_name, l1_folder_id)
+        spreadsheet_id = clone_template_to_entity(
+            drive_service, template_id, entity_name, l1_folder_id
+        )
         if not spreadsheet_id:
             print(f"✗ Failed to clone template spreadsheet for {entity_name}")
             return False
         print(f"  ✓ Cloned spreadsheet ID: {spreadsheet_id}")
 
         # 4. Process CSV files and write to matching tabs
-        print(f"Processing CSV files from L0-Raw...")
+        print("Processing CSV files from L0-Raw...")
         csv_files = list_csv_files_in_folder(drive_service, l0_folder_id)
         if not csv_files:
             print(f"  ⚠️  No CSV files found in L0-Raw folder for {entity_name}")
@@ -684,22 +754,26 @@ def process_entity(entity_name, creds, layout: DriveLayout):
                     # Download CSV
                     csv_data = download_csv_from_drive(drive_service, file_id)
                     if not csv_data:
-                        print(f"    ✗ Failed to download CSV file")
+                        print("    ✗ Failed to download CSV file")
                         csv_failed += 1
                         continue
 
                     # Write to sheet tab
-                    if write_csv_to_sheet_tab(gspread_client, spreadsheet_id, tab_name, csv_data, creds):
+                    if write_csv_to_sheet_tab(
+                        gspread_client, spreadsheet_id, tab_name, csv_data, creds
+                    ):
                         print(f"    ✓ Wrote data to tab '{tab_name}'")
                         csv_success += 1
                     else:
                         print(f"    ✗ Failed to write data to tab '{tab_name}'")
                         csv_failed += 1
 
-                print(f"  CSV processing summary: {csv_success} succeeded, {csv_failed} failed")
+                print(
+                    f"  CSV processing summary: {csv_success} succeeded, {csv_failed} failed"
+                )
 
         # 5. Copy image files (delete existing if present)
-        print(f"Copying image files from L0-Raw to L1-Merged...")
+        print("Copying image files from L0-Raw to L1-Merged...")
         image_files = list_image_files_in_folder(drive_service, l0_folder_id)
         if not image_files:
             print(f"  ⚠️  No image files found in L0-Raw folder for {entity_name}")
@@ -712,7 +786,9 @@ def process_entity(entity_name, creds, layout: DriveLayout):
 
                 for file_id, file_name in image_files:
                     print(f"  Copying: {file_name}")
-                    new_file_id = copy_image_to_folder(drive_service, file_id, l1_folder_id, file_name)
+                    new_file_id = copy_image_to_folder(
+                        drive_service, file_id, l1_folder_id, file_name
+                    )
                     if new_file_id:
                         print(f"    ✓ Copied image '{file_name}'")
                         image_success += 1
@@ -720,12 +796,15 @@ def process_entity(entity_name, creds, layout: DriveLayout):
                         print(f"    ✗ Failed to copy image '{file_name}'")
                         image_failed += 1
 
-                print(f"  Image copying summary: {image_success} succeeded, {image_failed} failed")
+                print(
+                    f"  Image copying summary: {image_success} succeeded, {image_failed} failed"
+                )
 
         return True
 
     except Exception as e:
         print(f"\n✗ Error processing entity '{entity_name}': {e}")
         import traceback
+
         traceback.print_exc()
         return False
