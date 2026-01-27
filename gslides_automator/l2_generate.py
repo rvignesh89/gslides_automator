@@ -697,6 +697,54 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
 
             new_slide_id = create_result["replies"][0]["createSlide"]["objectId"]
 
+            # Remove placeholder text boxes if slide was created with layoutId
+            # (layoutId-based slides automatically include placeholder elements from the layout)
+            if layout_object_id:
+                def _get_new_slide():
+                    return (
+                        slides_service.presentations()
+                        .get(presentationId=presentation_id)
+                        .execute()
+                    )
+
+                presentation = retry_with_exponential_backoff(_get_new_slide)
+                slides = presentation.get("slides", [])
+
+                # Find the newly created slide
+                new_slide = None
+                for slide in slides:
+                    if slide.get("objectId") == new_slide_id:
+                        new_slide = slide
+                        break
+
+                # Identify and delete placeholder elements
+                if new_slide:
+                    page_elements = new_slide.get("pageElements", [])
+                    placeholder_delete_requests = []
+
+                    for element in page_elements:
+                        # Check if element has a placeholder field (indicates it's a layout placeholder)
+                        if "placeholder" in element.get("shape", {}):
+                            element_id = element.get("objectId")
+                            if element_id:
+                                placeholder_delete_requests.append(
+                                    {"deleteObject": {"objectId": element_id}}
+                                )
+
+                    # Delete placeholder elements if any were found
+                    if placeholder_delete_requests:
+                        def _delete_placeholders():
+                            return (
+                                slides_service.presentations()
+                                .batchUpdate(
+                                    presentationId=presentation_id,
+                                    body={"requests": placeholder_delete_requests},
+                                )
+                                .execute()
+                            )
+
+                        retry_with_exponential_backoff(_delete_placeholders)
+
             # Copy page properties (background color, etc.) from template slide
             # Note: Some properties may be inherited from layout and cannot be overridden
             template_page_properties = template_slide.get("pageProperties", {})
