@@ -64,13 +64,7 @@ https://drive.google.com/drive/u/0/folders/0AIQQEzDV8s96Uk9PVA
 
 ### Per Slide L2 Generation
 
-When generating the whole slide in L2, the template is cloned into the destination folder. But due to limitations in the Google Slide API, we can't copy single slides from another presentation. We've overcome this limitation by recreating the slide using API by copying all individual elements. This generally works well, except for some cases mentioned in [Special Cases](#p)
-
-### Special Cases
-
-#### 1. Why is L0-Raw needed?
-
-Technically, if you are able to generate data in the L1-Merged structure you do not need L0-Raw. However, not all programming languages have good API's to interact with Google Sheets like R. So to be compatible in such scenarios the library provides L0-Raw as just csv files. But if have the ability to generate merged data for L1, skip L0 data generation.
+When generating the whole slide in L2, the template is cloned into the destination folder. But due to limitations in the Google Slide API, we can't copy single slides from another presentation. We've overcome this limitation by recreating the slide using API by copying all individual elements. This generally works well, except for the following scenarios.
 
 #### 2. Per slide L2 generation for tables
 
@@ -95,6 +89,19 @@ https://issuetracker.google.com/issues/402772744
 Similar to above, in some cases Google Slides API does not return all the correct text box styles. So when individual slides are regenerated, the text box styles are not preserved. If you face this issue, recreate the textbox and ensure the formatting is specifically applied to the text only and not to whitespace in between the text.
 
 If the issue still persists, open an issue on the repository sharing the slide with the text box and the expected formatting if possible.
+
+#### 1. Why is L0-Raw needed?
+
+Technically, if you are able to generate data in the L1-Merged structure you do not need L0-Raw. However, not all programming languages have good API's to interact with Google Sheets like R. So to be compatible in such scenarios the library provides L0-Raw as just csv files. But if have the ability to generate merged data for L1, skip L0 data generation.
+
+## Best Practices
+
+1. Have unique names for chart/picture/table elements
+2. Avoid using text padding since it affects per slide generation
+3. Generate slides for a single entity before scaling to all to ensure the report template is solid
+4. Alternatively, you could also generate report template slide by slide for all entities to plan for varying table data per entity.
+5. Avoid multiple people working on the shared drive as they could overwrite each others work ([Issue #12](#12) aims to resolve this in the future)
+6.
 
 ## Quick Start
 
