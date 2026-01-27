@@ -823,7 +823,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                         # This can happen if properties are inherited from layout or cannot be overridden
                         error_msg = str(e)
                         if "cannot be applied" in error_msg or "400" in error_msg:
-                            print(f"  ⚠️  Could not copy page background properties (may be inherited from layout)")
+                            print("  ⚠️  Could not copy page background properties (may be inherited from layout)")
                         else:
                             print(f"  ⚠️  Could not copy page properties: {error_msg}")
                     except Exception as e:
