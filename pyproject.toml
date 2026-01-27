@@ -36,7 +36,7 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "pytest-mock>=3.0.0",
-    "pytext-xdist>=3.8.0",
+    "pytest-xdist>=3.0.0",
 ]
 
 [tool.setuptools]
