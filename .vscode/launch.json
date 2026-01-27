@@ -11,6 +11,18 @@
       "program": "${file}",
       "console": "integratedTerminal",
       "args": "${command:pickArgs}"
-    }
+    },
+    {
+      "name": "Debug gslides_automator generate (module mode)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "gslides_automator",
+      "console": "integratedTerminal",
+      "args": [
+        "generate",
+        "--shared-drive-url",
+        "0AMMIZgpHjG6aUk9PVA"
+      ]
+    },
   ]
 }
