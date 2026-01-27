@@ -620,7 +620,9 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                 proceed = None
                 while proceed not in ("y", "yes", "n", "no"):
                     proceed = (
-                        input("  Do you wish to continue anyway? (y/N): ").strip().lower()
+                        input("  Do you wish to continue anyway? (y/N): ")
+                        .strip()
+                        .lower()
                         or "n"
                     )
                 _TABLE_SLIDE_PROCEED_DECISION = proceed in ("y", "yes")
@@ -664,8 +666,8 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
 
             # Extract slide layout reference from template slide
             slide_layout_ref = None
-            layout_object_id = (
-                template_slide.get("slideProperties", {}).get("layoutObjectId")
+            layout_object_id = template_slide.get("slideProperties", {}).get(
+                "layoutObjectId"
             )
             if layout_object_id:
                 slide_layout_ref = {"layoutId": layout_object_id}
@@ -700,6 +702,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
             # Remove placeholder text boxes if slide was created with layoutId
             # (layoutId-based slides automatically include placeholder elements from the layout)
             if layout_object_id:
+
                 def _get_new_slide():
                     return (
                         slides_service.presentations()
@@ -733,6 +736,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
 
                     # Delete placeholder elements if any were found
                     if placeholder_delete_requests:
+
                         def _delete_placeholders():
                             return (
                                 slides_service.presentations()
@@ -768,24 +772,34 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                     )
 
                     # Only copy if it's not empty and has actual fill data
-                    if is_custom_background and background_fill and (
-                        "solidFill" in background_fill
-                        or "stretchedPictureFill" in background_fill
-                        or "gradientFill" in background_fill
+                    if (
+                        is_custom_background
+                        and background_fill
+                        and (
+                            "solidFill" in background_fill
+                            or "stretchedPictureFill" in background_fill
+                            or "gradientFill" in background_fill
+                        )
                     ):
                         # Create a clean copy with only writable fields
                         clean_fill = {}
                         if "solidFill" in background_fill:
-                            clean_fill["solidFill"] = copy.deepcopy(background_fill["solidFill"])
+                            clean_fill["solidFill"] = copy.deepcopy(
+                                background_fill["solidFill"]
+                            )
                         if "stretchedPictureFill" in background_fill:
                             clean_fill["stretchedPictureFill"] = copy.deepcopy(
                                 background_fill["stretchedPictureFill"]
                             )
                         if "gradientFill" in background_fill:
-                            clean_fill["gradientFill"] = copy.deepcopy(background_fill["gradientFill"])
+                            clean_fill["gradientFill"] = copy.deepcopy(
+                                background_fill["gradientFill"]
+                            )
                         # Set propertyState if present, otherwise default to RENDERED
                         if "propertyState" in background_fill:
-                            clean_fill["propertyState"] = background_fill["propertyState"]
+                            clean_fill["propertyState"] = background_fill[
+                                "propertyState"
+                            ]
                         else:
                             clean_fill["propertyState"] = "RENDERED"
 
@@ -797,6 +811,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                 # (e.g., when inherited from layout or conflicting with layout properties)
                 if page_properties_to_copy:
                     try:
+
                         def _update_page_properties():
                             return (
                                 slides_service.presentations()
@@ -808,7 +823,9 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                                                 "updatePageProperties": {
                                                     "objectId": new_slide_id,
                                                     "pageProperties": page_properties_to_copy,
-                                                    "fields": ",".join(page_properties_to_copy.keys()),
+                                                    "fields": ",".join(
+                                                        page_properties_to_copy.keys()
+                                                    ),
                                                 }
                                             }
                                         ]
@@ -823,7 +840,9 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                         # This can happen if properties are inherited from layout or cannot be overridden
                         error_msg = str(e)
                         if "cannot be applied" in error_msg or "400" in error_msg:
-                            print("  ⚠️  Could not copy page background properties (may be inherited from layout)")
+                            print(
+                                "  ⚠️  Could not copy page background properties (may be inherited from layout)"
+                            )
                         else:
                             print(f"  ⚠️  Could not copy page properties: {error_msg}")
                     except Exception as e:

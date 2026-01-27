@@ -466,7 +466,7 @@ class TestL1ErrorCases:
 
         # Should fail - generate raises an exception, so we catch it
         with pytest.raises(Exception):
-           generate(creds=test_credentials, layout=test_drive_layout)
+            generate(creds=test_credentials, layout=test_drive_layout)
 
     def test_l1_special_characters(
         self,
