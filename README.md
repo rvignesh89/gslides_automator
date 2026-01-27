@@ -62,6 +62,10 @@ To understand the data better refer to the drive below which contains sample dat
 
 https://drive.google.com/drive/u/0/folders/0AIQQEzDV8s96Uk9PVA
 
+### Per Slide L2 Generation
+
+When generating the whole slide in L2, the template is cloned into the destination folder. But due to limitations in the Google Slide API, we can't copy single slides from another presentation. We've overcome this limitation by recreating the slide using API by copying all individual elements. This generally works well, except for some cases mentioned in [Special Cases](#p)
+
 ### Special Cases
 
 #### 1. Why is L0-Raw needed?
