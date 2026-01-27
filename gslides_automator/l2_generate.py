@@ -620,7 +620,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                 proceed = None
                 while proceed not in ("y", "yes", "n", "no"):
                     proceed = (
-                        input("Do you wish to continue anyway? (y/N): ").strip().lower()
+                        input("  Do you wish to continue anyway? (y/N): ").strip().lower()
                         or "n"
                     )
                 _TABLE_SLIDE_PROCEED_DECISION = proceed in ("y", "yes")
@@ -628,7 +628,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                     "  Your choice will be remembered for all future entities in this session."
                 )
             elif not _TABLE_SLIDE_PROCEED_DECISION:
-                print("✗ Cancelling processing as per stored user preference.")
+                print("  ✗ Cancelling processing as per stored user preference.")
                 return False
             else:
                 print(

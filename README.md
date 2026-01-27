@@ -62,9 +62,35 @@ To understand the data better refer to the drive below which contains sample dat
 
 https://drive.google.com/drive/u/0/folders/0AIQQEzDV8s96Uk9PVA
 
-### Why is L0-Raw needed?
+### Special Cases
+
+#### 1. Why is L0-Raw needed?
 
 Technically, if you are able to generate data in the L1-Merged structure you do not need L0-Raw. However, not all programming languages have good API's to interact with Google Sheets like R. So to be compatible in such scenarios the library provides L0-Raw as just csv files. But if have the ability to generate merged data for L1, skip L0 data generation.
+
+#### 2. Per slide L2 generation for tables
+
+Using the entities.csv you can re-generate specific slides. However, due to limitations in the Google Slides API certain properties (like padding) of elements are not returned when fetching them. This causes those elements to look different from the template and this is obviously noted in tables.
+
+Due to this, the code will ask for a confirmation from the user to accept the risk like below.
+
+```
+⚠️  Slide(s) 17 contain table elements.
+  Per-slide regeneration is not supported for slides with tables, as tables cannot be recreated with proper formatting via the API.
+  You may lose table formatting or experience unexpected behavior if you choose to proceed.
+Do you wish to continue anyway? (y/N):
+```
+
+There are couple of reports on Google to improve the API response and until then the user needs to decide if editiing slides with tables is acceptable.
+
+https://issuetracker.google.com/issues/209837879
+https://issuetracker.google.com/issues/402772744
+
+#### 3. Per slide L2 text generation
+
+Similar to above, in some cases Google Slides API does not return all the correct text box styles. So when individual slides are regenerated, the text box styles are not preserved. If you face this issue, recreate the textbox and ensure the formatting is specifically applied to the text only and not to whitespace in between the text.
+
+If the issue still persists, open an issue on the repository sharing the slide with the text box and the expected formatting if possible.
 
 ## Quick Start
 
