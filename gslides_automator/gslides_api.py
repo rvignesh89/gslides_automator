@@ -8,6 +8,7 @@ with rate limiting (600 reads/min, 60 writes/min) and automatic retry logic for 
 
 from __future__ import annotations
 import logging
+import random
 import threading
 import time
 from datetime import datetime
@@ -205,8 +206,11 @@ class GSlidesAPI:
 
                 if is_retryable:
                     if attempt < max_retries:
-                        # Calculate wait time with exponential backoff
-                        wait_time = min(delay, max_delay)
+                        # Calculate wait time with exponential backoff and random jitter
+                        base_wait_time = min(delay, max_delay)
+                        # Add random jitter: ±20% of the base wait time
+                        jitter = base_wait_time * 0.2 * (2 * random.random() - 1)
+                        wait_time = max(0.1, base_wait_time + jitter)  # Ensure minimum 0.1s
                         if status == 429:
                             error_msg = "Rate limit exceeded (429)"
                         else:
