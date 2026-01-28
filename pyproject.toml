@@ -9,7 +9,6 @@ description = "Generate data and reports from Google Sheets and Drive"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "gspread>=5.0.0",
     "google-auth>=2.0.0",
     "google-auth-httplib2>=0.1.0",
     "google-api-python-client>=2.0.0",

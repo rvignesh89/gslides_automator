@@ -7,7 +7,6 @@ copies a template presentation, and replaces placeholders with linked assets fro
 """
 
 from __future__ import annotations
-import gspread
 import os
 import sys
 import re
@@ -138,22 +137,26 @@ def get_entity_name_from_common_data(spreadsheet_id, creds):
         str: Entity name from the first data row (row 2) in the 'entity_name' column,
              or None if the sheet doesn't exist
     """
-    gspread_client = gspread.authorize(creds)
+    sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
 
     try:
-        # Open the spreadsheet
-        spreadsheet = gspread_client.open_by_key(spreadsheet_id)
+        # Get the spreadsheet to check if 'common_data' sheet exists
+        spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
 
-        # Find the 'common_data' sheet
-        try:
-            common_data_sheet = spreadsheet.worksheet("common_data")
-        except gspread.exceptions.WorksheetNotFound:
+        # Check if 'common_data' sheet exists
+        sheet_exists = False
+        for sheet in spreadsheet.get("sheets", []):
+            if sheet["properties"]["title"] == "common_data":
+                sheet_exists = True
+                break
+
+        if not sheet_exists:
             print("Error: 'common_data' sheet not found in spreadsheet")
             return None
 
-        # Read the first data row (row 2, assuming row 1 is header)
-        # Get all values from the sheet
-        all_values = common_data_sheet.get_all_values()
+        # Read all values from the 'common_data' sheet
+        value_range = sheets_api.get_values(spreadsheet_id, "common_data")
+        all_values = value_range.get("values", [])
 
         if not all_values or len(all_values) < 2:
             print("Error: 'common_data' sheet has no data rows")
@@ -198,21 +201,26 @@ def read_data_from_sheet(spreadsheet_id, sheet_name, creds):
         dict: Dictionary mapping keys (column 1) to values (column 2) from each row,
              or None if the sheet doesn't exist or has errors
     """
-    gspread_client = gspread.authorize(creds)
+    sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
 
     try:
-        # Open the spreadsheet
-        spreadsheet = gspread_client.open_by_key(spreadsheet_id)
+        # Get the spreadsheet to check if sheet exists
+        spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
 
-        # Find the data sheet
-        try:
-            data_sheet = spreadsheet.worksheet(sheet_name)
-        except gspread.exceptions.WorksheetNotFound:
+        # Check if sheet exists
+        sheet_exists = False
+        for sheet in spreadsheet.get("sheets", []):
+            if sheet["properties"]["title"] == sheet_name:
+                sheet_exists = True
+                break
+
+        if not sheet_exists:
             print(f"Error: Data sheet '{sheet_name}' not found in spreadsheet")
             return None
 
         # Read all values from the sheet
-        all_values = data_sheet.get_all_values()
+        value_range = sheets_api.get_values(spreadsheet_id, sheet_name)
+        all_values = value_range.get("values", [])
 
         if not all_values:
             print(f"Error: Data sheet '{sheet_name}' has no data rows")
@@ -243,17 +251,26 @@ def read_table_from_sheet(spreadsheet_id, sheet_name, creds):
     Read 2D table data from a sheet. Returns a list of rows (list of strings).
     Keeps the raw values; formatting is preserved in Slides by reusing existing cell styles.
     """
-    gspread_client = gspread.authorize(creds)
+    sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
 
     try:
-        spreadsheet = gspread_client.open_by_key(spreadsheet_id)
-        try:
-            worksheet = spreadsheet.worksheet(sheet_name)
-        except gspread.exceptions.WorksheetNotFound:
+        # Get the spreadsheet to check if sheet exists
+        spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
+
+        # Check if sheet exists
+        sheet_exists = False
+        for sheet in spreadsheet.get("sheets", []):
+            if sheet["properties"]["title"] == sheet_name:
+                sheet_exists = True
+                break
+
+        if not sheet_exists:
             print(f"  ⚠️  Table sheet '{sheet_name}' not found in spreadsheet")
             return None
 
-        values = worksheet.get_all_values()
+        # Read all values from the sheet
+        value_range = sheets_api.get_values(spreadsheet_id, sheet_name)
+        values = value_range.get("values", [])
         return values or []
     except Exception as e:
         print(f"  ⚠️  Error reading table data from sheet '{sheet_name}': {e}")
@@ -2905,7 +2922,7 @@ def process_spreadsheet(
         str: ID of the created presentation, or None if failed
     """
     # Initialize services
-    gspread_client = gspread.authorize(creds)
+    sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
 
     # Use entity_name from file/folder name
     entity_name = spreadsheet_name
@@ -2913,13 +2930,13 @@ def process_spreadsheet(
     try:
         # Get all worksheets from the spreadsheet
         print("Reading spreadsheet worksheets...")
-        spreadsheet = gspread_client.open_by_key(spreadsheet_id)
-        worksheets = spreadsheet.worksheets()
+        spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
+        worksheets = spreadsheet.get("sheets", [])
 
         # Filter and parse sheets matching the pattern (no slide numbers)
         sheet_mappings = []
-        for worksheet in worksheets:
-            sheet_name = worksheet.title
+        for sheet in worksheets:
+            sheet_name = sheet["properties"]["title"]
             parsed = parse_sheet_name(sheet_name)
             if parsed:
                 placeholder_type, placeholder_name = parsed
