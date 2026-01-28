@@ -12,7 +12,6 @@ from googleapiclient.http import MediaIoBaseDownload
 from gslides_automator.drive_layout import DriveLayout
 from gslides_automator.gdrive_api import GDriveAPI
 from gslides_automator.gsheets_api import GSheetsAPI
-import gspread
 import os
 import csv
 import io
@@ -379,28 +378,32 @@ def _convert_value_to_proper_type(value):
     return value_str
 
 
-def write_csv_to_sheet_tab(gspread_client, spreadsheet_id, tab_name, csv_data, creds):
+def write_csv_to_sheet_tab(sheets_api, spreadsheet_id, tab_name, csv_data, creds):
     """
     Write CSV data to specified tab starting from A1.
     Does not clear existing data - new data will overwrite starting from A1.
 
     Args:
-        gspread_client: Authorized gspread client
+        sheets_api: GSheetsAPI instance
         spreadsheet_id: ID of the spreadsheet
         tab_name: Name of the tab/worksheet
         csv_data: List of rows (each row is a list of values)
-        creds: Service account credentials
+        creds: Service account credentials (unused, kept for compatibility)
 
     Returns:
         bool: True if successful, False otherwise
     """
 
-    # Get the worksheet ID
-    spreadsheet = gspread_client.open_by_key(spreadsheet_id)
+    # Check if the worksheet exists
     try:
-        spreadsheet.worksheet(tab_name)
-    except gspread.exceptions.WorksheetNotFound:
-        print(f"    ⚠️  Tab '{tab_name}' not found in spreadsheet")
+        spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
+        sheets = spreadsheet.get("sheets", [])
+        sheet_titles = [sheet.get("properties", {}).get("title", "") for sheet in sheets]
+        if tab_name not in sheet_titles:
+            print(f"    ⚠️  Tab '{tab_name}' not found in spreadsheet")
+            return False
+    except Exception as e:
+        print(f"    ⚠️  Error checking for tab '{tab_name}': {e}")
         return False
 
     if not csv_data:
@@ -418,7 +421,6 @@ def write_csv_to_sheet_tab(gspread_client, spreadsheet_id, tab_name, csv_data, c
 
     # Use GSheetsAPI to write data with proper types
     try:
-        sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
         range_name = f"{tab_name}!A1"
         sheets_api.update_values(
             spreadsheet_id,
@@ -548,7 +550,7 @@ def process_entity(entity_name, creds, layout: DriveLayout):
         bool: True if successful, False otherwise
     """
     drive_api = GDriveAPI.get_shared_drive_service(creds)
-    gspread_client = gspread.authorize(creds)
+    sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
 
     l1_root_id = layout.l1_merged_id
     l0_root_id = layout.l0_raw_id
@@ -610,7 +612,7 @@ def process_entity(entity_name, creds, layout: DriveLayout):
 
                     # Write to sheet tab
                     if write_csv_to_sheet_tab(
-                        gspread_client, spreadsheet_id, tab_name, csv_data, creds
+                        sheets_api, spreadsheet_id, tab_name, csv_data, creds
                     ):
                         print(f"    ✓ Wrote data to tab '{tab_name}'")
                         csv_success += 1

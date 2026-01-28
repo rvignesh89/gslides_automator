@@ -266,11 +266,3 @@ class TestLeakyBucketSingleBucket:
         assert any("Rate limit - waiting" in record.message and "operation" in record.message for record in caplog.records)
         assert any("Rate limit - operation allowed" in record.message for record in caplog.records)
 
-
-# Backward compatibility tests using TokenBucket alias
-class TestTokenBucketDualBucket(TestLeakyBucketDualBucket):
-    """Test TokenBucket alias (backward compatibility)."""
-
-    def test_token_bucket_alias(self):
-        """Test that TokenBucket is an alias for LeakyBucket."""
-        assert TokenBucket is LeakyBucket
