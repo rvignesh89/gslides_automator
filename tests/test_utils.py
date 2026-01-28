@@ -16,6 +16,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
 
 from gslides_automator.drive_layout import DriveLayout
+from gslides_automator.gslides_api import GSlidesAPI
 
 
 def retry_with_exponential_backoff(
@@ -339,7 +340,7 @@ def create_test_slide_template(templates_folder_id: str, creds) -> str:
     Returns:
         Presentation ID of the created template
     """
-    slides_service = build("slides", "v1", credentials=creds)
+    slides_service = GSlidesAPI.get_instance(creds)
     drive_service = build("drive", "v3", credentials=creds)
 
     # Create presentation file directly in the templates folder using Drive API
@@ -363,34 +364,24 @@ def create_test_slide_template(templates_folder_id: str, creds) -> str:
 
     # Now use Slides API to add content to the presentation
     # Get the presentation to check for slides
-    presentation = (
-        slides_service.presentations()
-        .get(
-            presentationId=presentation_id,
-        )
-        .execute()
-    )
+    presentation = slides_service.get_presentation(presentation_id)
 
     # Get the first slide (presentations always have at least one slide)
     slides = presentation.get("slides", [])
     if not slides:
         # Create a slide if none exists (shouldn't happen, but handle it)
-        create_result = (
-            slides_service.presentations()
-            .batchUpdate(
-                presentationId=presentation_id,
-                body={
-                    "requests": [
-                        {
-                            "createSlide": {
-                                "insertionIndex": 0,
-                                "slideLayoutReference": {"predefinedLayout": "BLANK"},
-                            }
+        create_result = slides_service.batch_update(
+            presentation_id,
+            {
+                "requests": [
+                    {
+                        "createSlide": {
+                            "insertionIndex": 0,
+                            "slideLayoutReference": {"predefinedLayout": "BLANK"},
                         }
-                    ]
-                },
-            )
-            .execute()
+                    }
+                ]
+            }
         )
         slide_id = create_result["replies"][0]["createSlide"]["objectId"]
     else:
@@ -469,10 +460,10 @@ def create_test_slide_template(templates_folder_id: str, creds) -> str:
 
     # Execute batch update
     if requests:
-        slides_service.presentations().batchUpdate(
-            presentationId=presentation_id,
-            body={"requests": requests},
-        ).execute()
+        slides_service.batch_update(
+            presentation_id,
+            {"requests": requests}
+        )
 
     return presentation_id
 

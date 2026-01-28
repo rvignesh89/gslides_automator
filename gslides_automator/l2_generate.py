@@ -15,6 +15,7 @@ import time
 from typing import Optional, Set
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from gslides_automator.gslides_api import GSlidesAPI
 
 _TABLE_SLIDE_PROCEED_DECISION: Optional[bool] = (
     None  # Session-level choice for table slide regeneration
@@ -562,26 +563,14 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
     import copy
     import uuid
 
-    slides_service = build("slides", "v1", credentials=creds)
+    slides_service = GSlidesAPI.get_instance(creds)
 
     try:
         # Get template and target presentations
-        def _get_template():
-            return (
-                slides_service.presentations().get(presentationId=template_id).execute()
-            )
-
-        def _get_target():
-            return (
-                slides_service.presentations()
-                .get(presentationId=presentation_id)
-                .execute()
-            )
-
-        template_presentation = retry_with_exponential_backoff(_get_template)
+        template_presentation = slides_service.get_presentation(template_id)
         template_slides = template_presentation.get("slides", [])
 
-        target_presentation = retry_with_exponential_backoff(_get_target)
+        target_presentation = slides_service.get_presentation(presentation_id)
         target_slides = target_presentation.get("slides", [])
 
         if not template_slides or not target_slides:
@@ -646,18 +635,10 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                 delete_requests.append({"deleteObject": {"objectId": target_slide_id}})
 
         if delete_requests:
-
-            def _delete_slides():
-                return (
-                    slides_service.presentations()
-                    .batchUpdate(
-                        presentationId=presentation_id,
-                        body={"requests": delete_requests},
-                    )
-                    .execute()
-                )
-
-            retry_with_exponential_backoff(_delete_slides)
+            slides_service.batch_update(
+                presentation_id,
+                {"requests": delete_requests}
+            )
 
         # Now create new slides and copy elements from template
         for slide_number in sorted(slide_numbers):
@@ -676,41 +657,26 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                 slide_layout_ref = {"predefinedLayout": "BLANK"}
 
             # Create new slide with template's layout
-            def _create_slide():
-                return (
-                    slides_service.presentations()
-                    .batchUpdate(
-                        presentationId=presentation_id,
-                        body={
-                            "requests": [
-                                {
-                                    "createSlide": {
-                                        "insertionIndex": slide_index,
-                                        "slideLayoutReference": slide_layout_ref,
-                                    }
-                                }
-                            ]
-                        },
-                    )
-                    .execute()
-                )
-
-            create_result = retry_with_exponential_backoff(_create_slide)
+            create_result = slides_service.batch_update(
+                presentation_id,
+                {
+                    "requests": [
+                        {
+                            "createSlide": {
+                                "insertionIndex": slide_index,
+                                "slideLayoutReference": slide_layout_ref,
+                            }
+                        }
+                    ]
+                }
+            )
 
             new_slide_id = create_result["replies"][0]["createSlide"]["objectId"]
 
             # Remove placeholder text boxes if slide was created with layoutId
             # (layoutId-based slides automatically include placeholder elements from the layout)
             if layout_object_id:
-
-                def _get_new_slide():
-                    return (
-                        slides_service.presentations()
-                        .get(presentationId=presentation_id)
-                        .execute()
-                    )
-
-                presentation = retry_with_exponential_backoff(_get_new_slide)
+                presentation = slides_service.get_presentation(presentation_id)
                 slides = presentation.get("slides", [])
 
                 # Find the newly created slide
@@ -736,18 +702,10 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
 
                     # Delete placeholder elements if any were found
                     if placeholder_delete_requests:
-
-                        def _delete_placeholders():
-                            return (
-                                slides_service.presentations()
-                                .batchUpdate(
-                                    presentationId=presentation_id,
-                                    body={"requests": placeholder_delete_requests},
-                                )
-                                .execute()
-                            )
-
-                        retry_with_exponential_backoff(_delete_placeholders)
+                        slides_service.batch_update(
+                            presentation_id,
+                            {"requests": placeholder_delete_requests}
+                        )
 
             # Copy page properties (background color, etc.) from template slide
             # Note: Some properties may be inherited from layout and cannot be overridden
@@ -811,30 +769,22 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                 # (e.g., when inherited from layout or conflicting with layout properties)
                 if page_properties_to_copy:
                     try:
-
-                        def _update_page_properties():
-                            return (
-                                slides_service.presentations()
-                                .batchUpdate(
-                                    presentationId=presentation_id,
-                                    body={
-                                        "requests": [
-                                            {
-                                                "updatePageProperties": {
-                                                    "objectId": new_slide_id,
-                                                    "pageProperties": page_properties_to_copy,
-                                                    "fields": ",".join(
-                                                        page_properties_to_copy.keys()
-                                                    ),
-                                                }
-                                            }
-                                        ]
-                                    },
-                                )
-                                .execute()
-                            )
-
-                        retry_with_exponential_backoff(_update_page_properties)
+                        slides_service.batch_update(
+                            presentation_id,
+                            {
+                                "requests": [
+                                    {
+                                        "updatePageProperties": {
+                                            "objectId": new_slide_id,
+                                            "pageProperties": page_properties_to_copy,
+                                            "fields": ",".join(
+                                                page_properties_to_copy.keys()
+                                            ),
+                                        }
+                                    }
+                                ]
+                            }
+                        )
                     except HttpError as e:
                         # If updating page properties fails, log warning but continue
                         # This can happen if properties are inherited from layout or cannot be overridden
@@ -1636,18 +1586,10 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                     batch_size = 50
                     for i in range(0, len(copy_requests), batch_size):
                         batch = copy_requests[i : i + batch_size]
-
-                        def _copy_batch():
-                            return (
-                                slides_service.presentations()
-                                .batchUpdate(
-                                    presentationId=presentation_id,
-                                    body={"requests": batch},
-                                )
-                                .execute()
-                            )
-
-                        retry_with_exponential_backoff(_copy_batch)
+                        slides_service.batch_update(
+                            presentation_id,
+                            {"requests": batch}
+                        )
 
         print(f"  ✓ Replaced {len(slide_numbers)} slide(s) from template")
         return True
@@ -1918,16 +1860,11 @@ def replace_textbox_with_chart(
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = build("slides", "v1", credentials=creds)
+    slides_service = GSlidesAPI.get_instance(creds)
     sheets_service = build("sheets", "v4", credentials=creds)
 
     # Get the slide to find the z-order index of the textbox
-    def _get_presentation_for_chart():
-        return (
-            slides_service.presentations().get(presentationId=presentation_id).execute()
-        )
-
-    presentation = retry_with_exponential_backoff(_get_presentation_for_chart)
+    presentation = slides_service.get_presentation(presentation_id)
     presentation_slides = presentation.get("slides", [])
 
     # Find the slide and get its pageElements
@@ -2054,15 +1991,8 @@ def replace_textbox_with_chart(
     # Execute the batch update with retry logic
     body = {"requests": requests}
 
-    def execute_batch_update():
-        return (
-            slides_service.presentations()
-            .batchUpdate(presentationId=presentation_id, body=body)
-            .execute()
-        )
-
     try:
-        response = retry_with_exponential_backoff(execute_batch_update)
+        response = slides_service.batch_update(presentation_id, body)
 
         # Get the objectId of the newly created chart and restore z-order
         if z_order_index is not None:
@@ -2080,16 +2010,7 @@ def replace_textbox_with_chart(
                 # Since we deleted the element at z_order_index, the new element is at the end
                 # We need to move it back to z_order_index
                 # Get current slide state to find the correct new index
-                def _get_updated_presentation_chart_zorder():
-                    return (
-                        slides_service.presentations()
-                        .get(presentationId=presentation_id)
-                        .execute()
-                    )
-
-                updated_presentation = retry_with_exponential_backoff(
-                    _get_updated_presentation_chart_zorder
-                )
+                updated_presentation = slides_service.get_presentation(presentation_id)
                 updated_slides = updated_presentation.get("slides", [])
 
                 for s in updated_slides:
@@ -2125,18 +2046,11 @@ def replace_textbox_with_chart(
                                         }
                                     )
 
-                                def execute_order_update():
-                                    return (
-                                        slides_service.presentations()
-                                        .batchUpdate(
-                                            presentationId=presentation_id,
-                                            body={"requests": order_requests},
-                                        )
-                                        .execute()
-                                    )
-
                                 try:
-                                    retry_with_exponential_backoff(execute_order_update)
+                                    slides_service.batch_update(
+                                        presentation_id,
+                                        {"requests": order_requests}
+                                    )
                                 except HttpError as order_error:
                                     print(
                                         f"  ⚠️  Warning: Could not restore z-order position: {order_error}"
@@ -2175,16 +2089,11 @@ def replace_textbox_with_image(
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = build("slides", "v1", credentials=creds)
+    slides_service = GSlidesAPI.get_instance(creds)
     drive_service = build("drive", "v3", credentials=creds)
 
     # Get the slide to find the z-order index of the textbox
-    def _get_presentation_for_image_replace():
-        return (
-            slides_service.presentations().get(presentationId=presentation_id).execute()
-        )
-
-    presentation = retry_with_exponential_backoff(_get_presentation_for_image_replace)
+    presentation = slides_service.get_presentation(presentation_id)
     presentation_slides = presentation.get("slides", [])
 
     # Find the slide and get its pageElements
@@ -2424,15 +2333,8 @@ def replace_textbox_with_image(
     # Execute the batch update with retry logic
     body = {"requests": requests}
 
-    def execute_batch_update():
-        return (
-            slides_service.presentations()
-            .batchUpdate(presentationId=presentation_id, body=body)
-            .execute()
-        )
-
     try:
-        response = retry_with_exponential_backoff(execute_batch_update)
+        response = slides_service.batch_update(presentation_id, body)
 
         # Get the objectId of the newly created image and restore z-order
         if z_order_index is not None:
@@ -2450,11 +2352,7 @@ def replace_textbox_with_image(
                 # Since we deleted the element at z_order_index, the new element is at the end
                 # We need to move it back to z_order_index
                 # Get current slide state to find the correct new index
-                updated_presentation = (
-                    slides_service.presentations()
-                    .get(presentationId=presentation_id)
-                    .execute()
-                )
+                updated_presentation = slides_service.get_presentation(presentation_id)
                 updated_slides = updated_presentation.get("slides", [])
 
                 for s in updated_slides:
@@ -2490,18 +2388,11 @@ def replace_textbox_with_image(
                                         }
                                     )
 
-                                def execute_order_update():
-                                    return (
-                                        slides_service.presentations()
-                                        .batchUpdate(
-                                            presentationId=presentation_id,
-                                            body={"requests": order_requests},
-                                        )
-                                        .execute()
-                                    )
-
                                 try:
-                                    retry_with_exponential_backoff(execute_order_update)
+                                    slides_service.batch_update(
+                                        presentation_id,
+                                        {"requests": order_requests}
+                                    )
                                 except HttpError as order_error:
                                     print(
                                         f"  ⚠️  Warning: Could not restore z-order position: {order_error}"
@@ -2557,7 +2448,7 @@ def replace_multiple_placeholders_in_textbox(
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = build("slides", "v1", credentials=creds)
+    slides_service = GSlidesAPI.get_instance(creds)
 
     shape_id = textbox_element.get("objectId")
 
@@ -2697,15 +2588,8 @@ def replace_multiple_placeholders_in_textbox(
     # Execute the batch update with retry logic
     body = {"requests": requests}
 
-    def execute_batch_update():
-        return (
-            slides_service.presentations()
-            .batchUpdate(presentationId=presentation_id, body=body)
-            .execute()
-        )
-
     try:
-        retry_with_exponential_backoff(execute_batch_update)
+        slides_service.batch_update(presentation_id, body)
         replaced_count = len(placeholder_positions)
         print(f"  ✓ Replaced {replaced_count} placeholder(s) in slide {slide_number}")
         return True
@@ -2770,17 +2654,10 @@ def populate_table_with_data(
                     }
                 }
 
-                def execute_insert_rows():
-                    return (
-                        slides_service.presentations()
-                        .batchUpdate(
-                            presentationId=presentation_id,
-                            body={"requests": [insert_request]},
-                        )
-                        .execute()
-                    )
-
-                retry_with_exponential_backoff(execute_insert_rows)
+                slides_service.batch_update(
+                    presentation_id,
+                    {"requests": [insert_request]}
+                )
 
                 # Update for next batch: move insertion point and reduce remaining count
                 current_row_index += rows_in_batch
@@ -2929,17 +2806,10 @@ def populate_table_with_data(
     try:
         for i in range(0, len(requests), batch_size):
 
-            def _batch_update_table():
-                return (
-                    slides_service.presentations()
-                    .batchUpdate(
-                        presentationId=presentation_id,
-                        body={"requests": requests[i : i + batch_size]},
-                    )
-                    .execute()
-                )
-
-            retry_with_exponential_backoff(_batch_update_table)
+            slides_service.batch_update(
+                presentation_id,
+                {"requests": requests[i : i + batch_size]}
+            )
         print(f"  ✓ Populated table on slide {slide_number}")
         return True
     except HttpError as error:
@@ -2973,18 +2843,11 @@ def process_all_slides(
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = build("slides", "v1", credentials=creds)
+    slides_service = GSlidesAPI.get_instance(creds)
 
     try:
         # Get the presentation
-        def _get_presentation_process():
-            return (
-                slides_service.presentations()
-                .get(presentationId=presentation_id)
-                .execute()
-            )
-
-        presentation = retry_with_exponential_backoff(_get_presentation_process)
+        presentation = slides_service.get_presentation(presentation_id)
         presentation_slides = presentation.get("slides", [])
 
         # Build lookup dictionaries keyed by placeholder name
