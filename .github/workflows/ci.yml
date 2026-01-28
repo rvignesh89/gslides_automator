@@ -45,7 +45,7 @@ jobs:
         pip install -e ".[dev]"
 
     - name: Run pytest
-      run: pytest tests/ -v
+      run: pytest tests/ -n 3 -v
       env:
         # These will need to be set as GitHub secrets for integration tests
         # For now, tests that don't require these will still run

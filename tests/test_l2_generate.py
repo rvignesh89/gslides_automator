@@ -232,7 +232,7 @@ class TestL2ErrorCases:
 
         # Run generate - should fail - generate raises an exception, so we catch it
         with pytest.raises(Exception):
-            result = generate(creds=test_credentials, layout=test_drive_layout)
+            generate(creds=test_credentials, layout=test_drive_layout)
 
     def test_l2_missing_slide_template(
         self,
@@ -264,4 +264,4 @@ class TestL2ErrorCases:
 
         # Run generate - should fail due to invalid template - generate raises an exception, so we catch it
         with pytest.raises(Exception):
-            result = generate(creds=test_credentials, layout=test_drive_layout)
+            generate(creds=test_credentials, layout=test_drive_layout)

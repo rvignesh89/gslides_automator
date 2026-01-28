@@ -620,7 +620,9 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                 proceed = None
                 while proceed not in ("y", "yes", "n", "no"):
                     proceed = (
-                        input("Do you wish to continue anyway? (y/N): ").strip().lower()
+                        input("  Do you wish to continue anyway? (y/N): ")
+                        .strip()
+                        .lower()
                         or "n"
                     )
                 _TABLE_SLIDE_PROCEED_DECISION = proceed in ("y", "yes")
@@ -628,7 +630,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                     "  Your choice will be remembered for all future entities in this session."
                 )
             elif not _TABLE_SLIDE_PROCEED_DECISION:
-                print("✗ Cancelling processing as per stored user preference.")
+                print("  ✗ Cancelling processing as per stored user preference.")
                 return False
             else:
                 print(
@@ -662,7 +664,18 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
             slide_index = slide_number - 1
             template_slide = template_slides[slide_index]
 
-            # Create new blank slide
+            # Extract slide layout reference from template slide
+            slide_layout_ref = None
+            layout_object_id = template_slide.get("slideProperties", {}).get(
+                "layoutObjectId"
+            )
+            if layout_object_id:
+                slide_layout_ref = {"layoutId": layout_object_id}
+            if not slide_layout_ref:
+                # Default to BLANK if no layout reference exists
+                slide_layout_ref = {"predefinedLayout": "BLANK"}
+
+            # Create new slide with template's layout
             def _create_slide():
                 return (
                     slides_service.presentations()
@@ -673,9 +686,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                                 {
                                     "createSlide": {
                                         "insertionIndex": slide_index,
-                                        "slideLayoutReference": {
-                                            "predefinedLayout": "BLANK"
-                                        },
+                                        "slideLayoutReference": slide_layout_ref,
                                     }
                                 }
                             ]
@@ -687,6 +698,156 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
             create_result = retry_with_exponential_backoff(_create_slide)
 
             new_slide_id = create_result["replies"][0]["createSlide"]["objectId"]
+
+            # Remove placeholder text boxes if slide was created with layoutId
+            # (layoutId-based slides automatically include placeholder elements from the layout)
+            if layout_object_id:
+
+                def _get_new_slide():
+                    return (
+                        slides_service.presentations()
+                        .get(presentationId=presentation_id)
+                        .execute()
+                    )
+
+                presentation = retry_with_exponential_backoff(_get_new_slide)
+                slides = presentation.get("slides", [])
+
+                # Find the newly created slide
+                new_slide = None
+                for slide in slides:
+                    if slide.get("objectId") == new_slide_id:
+                        new_slide = slide
+                        break
+
+                # Identify and delete placeholder elements
+                if new_slide:
+                    page_elements = new_slide.get("pageElements", [])
+                    placeholder_delete_requests = []
+
+                    for element in page_elements:
+                        # Check if element has a placeholder field (indicates it's a layout placeholder)
+                        if "placeholder" in element.get("shape", {}):
+                            element_id = element.get("objectId")
+                            if element_id:
+                                placeholder_delete_requests.append(
+                                    {"deleteObject": {"objectId": element_id}}
+                                )
+
+                    # Delete placeholder elements if any were found
+                    if placeholder_delete_requests:
+
+                        def _delete_placeholders():
+                            return (
+                                slides_service.presentations()
+                                .batchUpdate(
+                                    presentationId=presentation_id,
+                                    body={"requests": placeholder_delete_requests},
+                                )
+                                .execute()
+                            )
+
+                        retry_with_exponential_backoff(_delete_placeholders)
+
+            # Copy page properties (background color, etc.) from template slide
+            # Note: Some properties may be inherited from layout and cannot be overridden
+            template_page_properties = template_slide.get("pageProperties", {})
+            if template_page_properties:
+                # Extract writable page properties
+                page_properties_to_copy = {}
+
+                # Copy pageBackgroundFill if present (contains background color)
+                # Only copy if it has valid fill data
+                # Skip if using a layout reference (layout may already define background)
+                # unless the template slide has a custom background override
+                if "pageBackgroundFill" in template_page_properties:
+                    background_fill = template_page_properties["pageBackgroundFill"]
+                    # Check if this is a custom background (not inherited)
+                    # propertyState of RENDERED indicates an explicit background
+                    is_custom_background = (
+                        background_fill.get("propertyState") == "RENDERED"
+                        or "solidFill" in background_fill
+                        or "stretchedPictureFill" in background_fill
+                        or "gradientFill" in background_fill
+                    )
+
+                    # Only copy if it's not empty and has actual fill data
+                    if (
+                        is_custom_background
+                        and background_fill
+                        and (
+                            "solidFill" in background_fill
+                            or "stretchedPictureFill" in background_fill
+                            or "gradientFill" in background_fill
+                        )
+                    ):
+                        # Create a clean copy with only writable fields
+                        clean_fill = {}
+                        if "solidFill" in background_fill:
+                            clean_fill["solidFill"] = copy.deepcopy(
+                                background_fill["solidFill"]
+                            )
+                        if "stretchedPictureFill" in background_fill:
+                            clean_fill["stretchedPictureFill"] = copy.deepcopy(
+                                background_fill["stretchedPictureFill"]
+                            )
+                        if "gradientFill" in background_fill:
+                            clean_fill["gradientFill"] = copy.deepcopy(
+                                background_fill["gradientFill"]
+                            )
+                        # Set propertyState if present, otherwise default to RENDERED
+                        if "propertyState" in background_fill:
+                            clean_fill["propertyState"] = background_fill[
+                                "propertyState"
+                            ]
+                        else:
+                            clean_fill["propertyState"] = "RENDERED"
+
+                        if clean_fill:
+                            page_properties_to_copy["pageBackgroundFill"] = clean_fill
+
+                # Update page properties if any were found
+                # Wrap in try-except to handle cases where properties cannot be applied
+                # (e.g., when inherited from layout or conflicting with layout properties)
+                if page_properties_to_copy:
+                    try:
+
+                        def _update_page_properties():
+                            return (
+                                slides_service.presentations()
+                                .batchUpdate(
+                                    presentationId=presentation_id,
+                                    body={
+                                        "requests": [
+                                            {
+                                                "updatePageProperties": {
+                                                    "objectId": new_slide_id,
+                                                    "pageProperties": page_properties_to_copy,
+                                                    "fields": ",".join(
+                                                        page_properties_to_copy.keys()
+                                                    ),
+                                                }
+                                            }
+                                        ]
+                                    },
+                                )
+                                .execute()
+                            )
+
+                        retry_with_exponential_backoff(_update_page_properties)
+                    except HttpError as e:
+                        # If updating page properties fails, log warning but continue
+                        # This can happen if properties are inherited from layout or cannot be overridden
+                        error_msg = str(e)
+                        if "cannot be applied" in error_msg or "400" in error_msg:
+                            print(
+                                "  ⚠️  Could not copy page background properties (may be inherited from layout)"
+                            )
+                        else:
+                            print(f"  ⚠️  Could not copy page properties: {error_msg}")
+                    except Exception as e:
+                        # Catch any other unexpected errors
+                        print(f"  ⚠️  Could not copy page properties: {e}")
 
             # Copy page elements from template slide
             template_elements = template_slide.get("pageElements", [])
