@@ -7,14 +7,15 @@ copies a template presentation, and replaces placeholders with linked assets fro
 """
 
 from __future__ import annotations
-import gspread
 import os
 import sys
 import re
 import time
 from typing import Optional, Set
-from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from gslides_automator.gslides_api import GSlidesAPI
+from gslides_automator.gdrive_api import GDriveAPI
+from gslides_automator.gsheets_api import GSheetsAPI
 
 _TABLE_SLIDE_PROCEED_DECISION: Optional[bool] = (
     None  # Session-level choice for table slide regeneration
@@ -23,64 +24,6 @@ _TABLE_SLIDE_PROCEED_DECISION: Optional[bool] = (
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
-
-
-def retry_with_exponential_backoff(
-    func, max_retries=5, initial_delay=1, max_delay=60, backoff_factor=2
-):
-    """
-    Retry a function with exponential backoff on 429 (Too Many Requests) and 5xx (Server) errors.
-
-    Args:
-        func: Function to retry (should be a callable that takes no arguments)
-        max_retries: Maximum number of retry attempts (default: 5)
-        initial_delay: Initial delay in seconds before first retry (default: 1)
-        max_delay: Maximum delay in seconds between retries (default: 60)
-        backoff_factor: Factor to multiply delay by after each retry (default: 2)
-
-    Returns:
-        The return value of func() if successful
-
-    Raises:
-        HttpError: If the error is not retryable or if max_retries is exceeded
-        Exception: Any other exception raised by func()
-    """
-    delay = initial_delay
-
-    for attempt in range(max_retries + 1):
-        try:
-            return func()
-        except HttpError as error:
-            status = error.resp.status
-            # Check if it's a retryable error (429 Too Many Requests or 5xx Server Errors)
-            is_retryable = (status == 429) or (500 <= status < 600)
-
-            if is_retryable:
-                if attempt < max_retries:
-                    # Calculate wait time with exponential backoff
-                    wait_time = min(delay, max_delay)
-                    if status == 429:
-                        error_msg = "Rate limit exceeded (429)"
-                    else:
-                        error_msg = f"Server error ({status})"
-                    print(
-                        f"  ⚠️  {error_msg}. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})"
-                    )
-                    time.sleep(wait_time)
-                    delay *= backoff_factor
-                else:
-                    if status == 429:
-                        error_msg = "Rate limit exceeded (429)"
-                    else:
-                        error_msg = f"Server error ({status})"
-                    print(f"  ✗ {error_msg}. Max retries ({max_retries}) reached.")
-                    raise
-            else:
-                # For non-retryable errors, re-raise immediately
-                raise
-        except Exception:
-            # For non-HttpError exceptions, re-raise immediately
-            raise
 
 
 def list_entity_folders(parent_folder_id, creds):
@@ -94,29 +37,27 @@ def list_entity_folders(parent_folder_id, creds):
     Returns:
         list: List of tuples (folder_id, folder_name)
     """
-    drive_service = build("drive", "v3", credentials=creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
     folders = []
 
     try:
         # Query for folders in the parent folder
         query = f"mimeType='application/vnd.google-apps.folder' and '{parent_folder_id}' in parents and trashed=false"
 
-        results = (
-            drive_service.files()
-            .list(
-                q=query,
-                fields="files(id, name)",
-                pageSize=1000,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            )
-            .execute()
+        results = drive_api.list_files(
+            query=query,
+            fields="files(id, name)",
+            pageSize=1000,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
         )
 
         items = results.get("files", [])
 
         for item in items:
-            folders.append((item["id"], item["name"]))
+            # Ensure item has both id and name before creating tuple
+            if isinstance(item, dict) and "id" in item and "name" in item:
+                folders.append((item["id"], item["name"]))
 
         return folders
 
@@ -136,29 +77,27 @@ def list_spreadsheets_in_folder(folder_id, creds):
     Returns:
         list: List of tuples (spreadsheet_id, spreadsheet_name)
     """
-    drive_service = build("drive", "v3", credentials=creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
     spreadsheets = []
 
     try:
         # Query for Google Sheets files in the folder
         query = f"mimeType='application/vnd.google-apps.spreadsheet' and '{folder_id}' in parents and trashed=false"
 
-        results = (
-            drive_service.files()
-            .list(
-                q=query,
-                fields="files(id, name)",
-                pageSize=1000,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            )
-            .execute()
+        results = drive_api.list_files(
+            query=query,
+            fields="files(id, name)",
+            pageSize=1000,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
         )
 
         items = results.get("files", [])
 
         for item in items:
-            spreadsheets.append((item["id"], item["name"]))
+            # Ensure item has both id and name before creating tuple
+            if isinstance(item, dict) and "id" in item and "name" in item:
+                spreadsheets.append((item["id"], item["name"]))
 
         return spreadsheets
 
@@ -198,22 +137,26 @@ def get_entity_name_from_common_data(spreadsheet_id, creds):
         str: Entity name from the first data row (row 2) in the 'entity_name' column,
              or None if the sheet doesn't exist
     """
-    gspread_client = gspread.authorize(creds)
+    sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
 
     try:
-        # Open the spreadsheet
-        spreadsheet = gspread_client.open_by_key(spreadsheet_id)
+        # Get the spreadsheet to check if 'common_data' sheet exists
+        spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
 
-        # Find the 'common_data' sheet
-        try:
-            common_data_sheet = spreadsheet.worksheet("common_data")
-        except gspread.exceptions.WorksheetNotFound:
+        # Check if 'common_data' sheet exists
+        sheet_exists = False
+        for sheet in spreadsheet.get("sheets", []):
+            if sheet["properties"]["title"] == "common_data":
+                sheet_exists = True
+                break
+
+        if not sheet_exists:
             print("Error: 'common_data' sheet not found in spreadsheet")
             return None
 
-        # Read the first data row (row 2, assuming row 1 is header)
-        # Get all values from the sheet
-        all_values = common_data_sheet.get_all_values()
+        # Read all values from the 'common_data' sheet
+        value_range = sheets_api.get_values(spreadsheet_id, "common_data")
+        all_values = value_range.get("values", [])
 
         if not all_values or len(all_values) < 2:
             print("Error: 'common_data' sheet has no data rows")
@@ -258,21 +201,26 @@ def read_data_from_sheet(spreadsheet_id, sheet_name, creds):
         dict: Dictionary mapping keys (column 1) to values (column 2) from each row,
              or None if the sheet doesn't exist or has errors
     """
-    gspread_client = gspread.authorize(creds)
+    sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
 
     try:
-        # Open the spreadsheet
-        spreadsheet = gspread_client.open_by_key(spreadsheet_id)
+        # Get the spreadsheet to check if sheet exists
+        spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
 
-        # Find the data sheet
-        try:
-            data_sheet = spreadsheet.worksheet(sheet_name)
-        except gspread.exceptions.WorksheetNotFound:
+        # Check if sheet exists
+        sheet_exists = False
+        for sheet in spreadsheet.get("sheets", []):
+            if sheet["properties"]["title"] == sheet_name:
+                sheet_exists = True
+                break
+
+        if not sheet_exists:
             print(f"Error: Data sheet '{sheet_name}' not found in spreadsheet")
             return None
 
         # Read all values from the sheet
-        all_values = data_sheet.get_all_values()
+        value_range = sheets_api.get_values(spreadsheet_id, sheet_name)
+        all_values = value_range.get("values", [])
 
         if not all_values:
             print(f"Error: Data sheet '{sheet_name}' has no data rows")
@@ -303,17 +251,26 @@ def read_table_from_sheet(spreadsheet_id, sheet_name, creds):
     Read 2D table data from a sheet. Returns a list of rows (list of strings).
     Keeps the raw values; formatting is preserved in Slides by reusing existing cell styles.
     """
-    gspread_client = gspread.authorize(creds)
+    sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
 
     try:
-        spreadsheet = gspread_client.open_by_key(spreadsheet_id)
-        try:
-            worksheet = spreadsheet.worksheet(sheet_name)
-        except gspread.exceptions.WorksheetNotFound:
+        # Get the spreadsheet to check if sheet exists
+        spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
+
+        # Check if sheet exists
+        sheet_exists = False
+        for sheet in spreadsheet.get("sheets", []):
+            if sheet["properties"]["title"] == sheet_name:
+                sheet_exists = True
+                break
+
+        if not sheet_exists:
             print(f"  ⚠️  Table sheet '{sheet_name}' not found in spreadsheet")
             return None
 
-        values = worksheet.get_all_values()
+        # Read all values from the sheet
+        value_range = sheets_api.get_values(spreadsheet_id, sheet_name)
+        values = value_range.get("values", [])
         return values or []
     except Exception as e:
         print(f"  ⚠️  Error reading table data from sheet '{sheet_name}': {e}")
@@ -332,27 +289,20 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
     Returns:
         bool: True if a presentation was found and deleted, False otherwise
     """
-    drive_service = build("drive", "v3", credentials=creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
 
     try:
         # Search for existing presentation with the expected name
         expected_filename = f"{entity_name}.gslides"
         query = f"'{output_folder_id}' in parents and name='{expected_filename}' and mimeType='application/vnd.google-apps.presentation' and trashed=false"
 
-        def list_files():
-            return (
-                drive_service.files()
-                .list(
-                    q=query,
-                    fields="files(id, name)",
-                    pageSize=10,
-                    supportsAllDrives=True,
-                    includeItemsFromAllDrives=True,
-                )
-                .execute()
-            )
-
-        results = retry_with_exponential_backoff(list_files)
+        results = drive_api.list_files(
+            query=query,
+            fields="files(id, name)",
+            pageSize=10,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        )
 
         files = results.get("files", [])
         if files:
@@ -360,19 +310,11 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
             for file in files:
                 # First check if file is accessible
                 try:
-
-                    def _check_file_access():
-                        return (
-                            drive_service.files()
-                            .get(
-                                fileId=file["id"],
-                                fields="id, name",
-                                supportsAllDrives=True,
-                            )
-                            .execute()
-                        )
-
-                    retry_with_exponential_backoff(_check_file_access)
+                    drive_api.get_file(
+                        file["id"],
+                        fields="id, name",
+                        supportsAllDrives=True,
+                    )
                 except HttpError as check_error:
                     if check_error.resp.status == 404:
                         try:
@@ -398,15 +340,8 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
                         print(f"  ⚠️  Error checking presentation access: {check_error}")
                         continue
 
-                def delete_file():
-                    return (
-                        drive_service.files()
-                        .delete(fileId=file["id"], supportsAllDrives=True)
-                        .execute()
-                    )
-
                 try:
-                    retry_with_exponential_backoff(delete_file)
+                    drive_api.delete_file(file["id"], supportsAllDrives=True)
                     print(
                         f"  ✓ Deleted existing presentation: {file['name']} (ID: {file['id']})"
                     )
@@ -476,27 +411,20 @@ def find_existing_presentation(entity_name, output_folder_id, creds):
     Returns:
         str: Presentation ID if found, None otherwise
     """
-    drive_service = build("drive", "v3", credentials=creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
 
     try:
         # Search for existing presentation with the expected name
         expected_filename = f"{entity_name}.gslides"
         query = f"'{output_folder_id}' in parents and name='{expected_filename}' and mimeType='application/vnd.google-apps.presentation' and trashed=false"
 
-        def list_files():
-            return (
-                drive_service.files()
-                .list(
-                    q=query,
-                    fields="files(id, name)",
-                    pageSize=10,
-                    supportsAllDrives=True,
-                    includeItemsFromAllDrives=True,
-                )
-                .execute()
-            )
-
-        results = retry_with_exponential_backoff(list_files)
+        results = drive_api.list_files(
+            query=query,
+            fields="files(id, name)",
+            pageSize=10,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        )
 
         files = results.get("files", [])
         if files:
@@ -504,15 +432,7 @@ def find_existing_presentation(entity_name, output_folder_id, creds):
             file_id = files[0]["id"]
             # Verify file is accessible
             try:
-
-                def _verify_file_access():
-                    return (
-                        drive_service.files()
-                        .get(fileId=file_id, fields="id, name", supportsAllDrives=True)
-                        .execute()
-                    )
-
-                retry_with_exponential_backoff(_verify_file_access)
+                drive_api.get_file(file_id, fields="id, name", supportsAllDrives=True)
                 return file_id
             except HttpError as check_error:
                 if check_error.resp.status == 404:
@@ -562,26 +482,14 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
     import copy
     import uuid
 
-    slides_service = build("slides", "v1", credentials=creds)
+    slides_service = GSlidesAPI.get_shared_slides_service(creds)
 
     try:
         # Get template and target presentations
-        def _get_template():
-            return (
-                slides_service.presentations().get(presentationId=template_id).execute()
-            )
-
-        def _get_target():
-            return (
-                slides_service.presentations()
-                .get(presentationId=presentation_id)
-                .execute()
-            )
-
-        template_presentation = retry_with_exponential_backoff(_get_template)
+        template_presentation = slides_service.get_presentation(template_id)
         template_slides = template_presentation.get("slides", [])
 
-        target_presentation = retry_with_exponential_backoff(_get_target)
+        target_presentation = slides_service.get_presentation(presentation_id)
         target_slides = target_presentation.get("slides", [])
 
         if not template_slides or not target_slides:
@@ -646,18 +554,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                 delete_requests.append({"deleteObject": {"objectId": target_slide_id}})
 
         if delete_requests:
-
-            def _delete_slides():
-                return (
-                    slides_service.presentations()
-                    .batchUpdate(
-                        presentationId=presentation_id,
-                        body={"requests": delete_requests},
-                    )
-                    .execute()
-                )
-
-            retry_with_exponential_backoff(_delete_slides)
+            slides_service.batch_update(presentation_id, {"requests": delete_requests})
 
         # Now create new slides and copy elements from template
         for slide_number in sorted(slide_numbers):
@@ -676,41 +573,26 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                 slide_layout_ref = {"predefinedLayout": "BLANK"}
 
             # Create new slide with template's layout
-            def _create_slide():
-                return (
-                    slides_service.presentations()
-                    .batchUpdate(
-                        presentationId=presentation_id,
-                        body={
-                            "requests": [
-                                {
-                                    "createSlide": {
-                                        "insertionIndex": slide_index,
-                                        "slideLayoutReference": slide_layout_ref,
-                                    }
-                                }
-                            ]
-                        },
-                    )
-                    .execute()
-                )
-
-            create_result = retry_with_exponential_backoff(_create_slide)
+            create_result = slides_service.batch_update(
+                presentation_id,
+                {
+                    "requests": [
+                        {
+                            "createSlide": {
+                                "insertionIndex": slide_index,
+                                "slideLayoutReference": slide_layout_ref,
+                            }
+                        }
+                    ]
+                },
+            )
 
             new_slide_id = create_result["replies"][0]["createSlide"]["objectId"]
 
             # Remove placeholder text boxes if slide was created with layoutId
             # (layoutId-based slides automatically include placeholder elements from the layout)
             if layout_object_id:
-
-                def _get_new_slide():
-                    return (
-                        slides_service.presentations()
-                        .get(presentationId=presentation_id)
-                        .execute()
-                    )
-
-                presentation = retry_with_exponential_backoff(_get_new_slide)
+                presentation = slides_service.get_presentation(presentation_id)
                 slides = presentation.get("slides", [])
 
                 # Find the newly created slide
@@ -736,18 +618,9 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
 
                     # Delete placeholder elements if any were found
                     if placeholder_delete_requests:
-
-                        def _delete_placeholders():
-                            return (
-                                slides_service.presentations()
-                                .batchUpdate(
-                                    presentationId=presentation_id,
-                                    body={"requests": placeholder_delete_requests},
-                                )
-                                .execute()
-                            )
-
-                        retry_with_exponential_backoff(_delete_placeholders)
+                        slides_service.batch_update(
+                            presentation_id, {"requests": placeholder_delete_requests}
+                        )
 
             # Copy page properties (background color, etc.) from template slide
             # Note: Some properties may be inherited from layout and cannot be overridden
@@ -811,30 +684,22 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                 # (e.g., when inherited from layout or conflicting with layout properties)
                 if page_properties_to_copy:
                     try:
-
-                        def _update_page_properties():
-                            return (
-                                slides_service.presentations()
-                                .batchUpdate(
-                                    presentationId=presentation_id,
-                                    body={
-                                        "requests": [
-                                            {
-                                                "updatePageProperties": {
-                                                    "objectId": new_slide_id,
-                                                    "pageProperties": page_properties_to_copy,
-                                                    "fields": ",".join(
-                                                        page_properties_to_copy.keys()
-                                                    ),
-                                                }
-                                            }
-                                        ]
-                                    },
-                                )
-                                .execute()
-                            )
-
-                        retry_with_exponential_backoff(_update_page_properties)
+                        slides_service.batch_update(
+                            presentation_id,
+                            {
+                                "requests": [
+                                    {
+                                        "updatePageProperties": {
+                                            "objectId": new_slide_id,
+                                            "pageProperties": page_properties_to_copy,
+                                            "fields": ",".join(
+                                                page_properties_to_copy.keys()
+                                            ),
+                                        }
+                                    }
+                                ]
+                            },
+                        )
                     except HttpError as e:
                         # If updating page properties fails, log warning but continue
                         # This can happen if properties are inherited from layout or cannot be overridden
@@ -1636,18 +1501,9 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                     batch_size = 50
                     for i in range(0, len(copy_requests), batch_size):
                         batch = copy_requests[i : i + batch_size]
-
-                        def _copy_batch():
-                            return (
-                                slides_service.presentations()
-                                .batchUpdate(
-                                    presentationId=presentation_id,
-                                    body={"requests": batch},
-                                )
-                                .execute()
-                            )
-
-                        retry_with_exponential_backoff(_copy_batch)
+                        slides_service.batch_update(
+                            presentation_id, {"requests": batch}
+                        )
 
         print(f"  ✓ Replaced {len(slide_numbers)} slide(s) from template")
         return True
@@ -1673,23 +1529,16 @@ def copy_template_presentation(spreadsheet_name, template_id, output_folder_id, 
     Returns:
         str: ID of the copied presentation
     """
-    drive_service = build("drive", "v3", credentials=creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
 
     # Copy the template
     print("Copying template presentation...")
 
-    def _copy_file():
-        return (
-            drive_service.files()
-            .copy(
-                fileId=template_id,
-                body={"name": f"{spreadsheet_name}.gslides"},
-                supportsAllDrives=True,
-            )
-            .execute()
-        )
-
-    copied_file = retry_with_exponential_backoff(_copy_file)
+    copied_file = drive_api.copy_file(
+        template_id,
+        body={"name": f"{spreadsheet_name}.gslides"},
+        supportsAllDrives=True,
+    )
 
     new_presentation_id = copied_file.get("id")
     print(
@@ -1699,46 +1548,27 @@ def copy_template_presentation(spreadsheet_name, template_id, output_folder_id, 
     # Move to output folder
     print("Moving presentation to output folder...")
 
-    def _get_file_metadata():
-        return (
-            drive_service.files()
-            .get(fileId=new_presentation_id, fields="parents", supportsAllDrives=True)
-            .execute()
-        )
-
-    file_metadata = retry_with_exponential_backoff(_get_file_metadata)
+    file_metadata = drive_api.get_file(
+        new_presentation_id, fields="parents", supportsAllDrives=True
+    )
     previous_parents = ",".join(file_metadata.get("parents", []))
 
-    def _update_file_with_parents():
-        return (
-            drive_service.files()
-            .update(
-                fileId=new_presentation_id,
-                addParents=output_folder_id,
-                removeParents=previous_parents,
-                fields="id, parents",
-                supportsAllDrives=True,
-            )
-            .execute()
-        )
-
-    def _update_file_add_only():
-        return (
-            drive_service.files()
-            .update(
-                fileId=new_presentation_id,
-                addParents=output_folder_id,
-                fields="id, parents",
-                supportsAllDrives=True,
-            )
-            .execute()
-        )
-
     if previous_parents:
-        retry_with_exponential_backoff(_update_file_with_parents)
+        drive_api.update_file(
+            new_presentation_id,
+            addParents=output_folder_id,
+            removeParents=previous_parents,
+            fields="id, parents",
+            supportsAllDrives=True,
+        )
     else:
         # If no previous parents, just add to the folder
-        retry_with_exponential_backoff(_update_file_add_only)
+        drive_api.update_file(
+            new_presentation_id,
+            addParents=output_folder_id,
+            fields="id, parents",
+            supportsAllDrives=True,
+        )
 
     return new_presentation_id
 
@@ -1755,18 +1585,11 @@ def get_chart_id_from_sheet(spreadsheet_id, sheet_name, creds):
     Returns:
         int: Chart ID, or None if not found
     """
-    sheets_service = build("sheets", "v4", credentials=creds)
+    sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
 
     try:
         # Get the spreadsheet to find charts
-        def _get_spreadsheet():
-            return (
-                sheets_service.spreadsheets()
-                .get(spreadsheetId=spreadsheet_id)
-                .execute()
-            )
-
-        spreadsheet = retry_with_exponential_backoff(_get_spreadsheet)
+        spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
 
         # Find the sheet and get its charts
         for sheet in spreadsheet.get("sheets", []):
@@ -1798,7 +1621,7 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
     Returns:
         str: Image file ID that can be used to get public URL, or None if not found
     """
-    drive_service = build("drive", "v3", credentials=creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
 
     try:
         # Construct expected filename: picture-<picture_name>
@@ -1827,21 +1650,13 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
             query = f"'{entity_folder_id}' in parents and name='{image_filename}' and trashed=false and ({mime_query})"
 
             try:
-
-                def _list_files():
-                    return (
-                        drive_service.files()
-                        .list(
-                            q=query,
-                            fields="files(id, name, mimeType)",
-                            pageSize=10,
-                            supportsAllDrives=True,
-                            includeItemsFromAllDrives=True,
-                        )
-                        .execute()
-                    )
-
-                results = retry_with_exponential_backoff(_list_files)
+                results = drive_api.list_files(
+                    query=query,
+                    fields="files(id, name, mimeType)",
+                    pageSize=10,
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                )
 
                 files = results.get("files", [])
                 if files:
@@ -1856,21 +1671,13 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
         query = f"'{entity_folder_id}' in parents and name contains '{expected_filename_base}' and trashed=false and ({mime_query})"
 
         try:
-
-            def _list_files_flexible():
-                return (
-                    drive_service.files()
-                    .list(
-                        q=query,
-                        fields="files(id, name, mimeType)",
-                        pageSize=10,
-                        supportsAllDrives=True,
-                        includeItemsFromAllDrives=True,
-                    )
-                    .execute()
-                )
-
-            results = retry_with_exponential_backoff(_list_files_flexible)
+            results = drive_api.list_files(
+                query=query,
+                fields="files(id, name, mimeType)",
+                pageSize=10,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
 
             files = results.get("files", [])
             if files:
@@ -1918,16 +1725,11 @@ def replace_textbox_with_chart(
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = build("slides", "v1", credentials=creds)
-    sheets_service = build("sheets", "v4", credentials=creds)
+    slides_service = GSlidesAPI.get_shared_slides_service(creds)
+    sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
 
     # Get the slide to find the z-order index of the textbox
-    def _get_presentation_for_chart():
-        return (
-            slides_service.presentations().get(presentationId=presentation_id).execute()
-        )
-
-    presentation = retry_with_exponential_backoff(_get_presentation_for_chart)
+    presentation = slides_service.get_presentation(presentation_id)
     presentation_slides = presentation.get("slides", [])
 
     # Find the slide and get its pageElements
@@ -2001,10 +1803,7 @@ def replace_textbox_with_chart(
     actual_height = base_height * scale_y
 
     # Get the sheet ID for the chart
-    def _get_spreadsheet_for_chart():
-        return sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-
-    spreadsheet = retry_with_exponential_backoff(_get_spreadsheet_for_chart)
+    spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
     sheet_id = None
 
     for sheet in spreadsheet.get("sheets", []):
@@ -2054,15 +1853,8 @@ def replace_textbox_with_chart(
     # Execute the batch update with retry logic
     body = {"requests": requests}
 
-    def execute_batch_update():
-        return (
-            slides_service.presentations()
-            .batchUpdate(presentationId=presentation_id, body=body)
-            .execute()
-        )
-
     try:
-        response = retry_with_exponential_backoff(execute_batch_update)
+        response = slides_service.batch_update(presentation_id, body)
 
         # Get the objectId of the newly created chart and restore z-order
         if z_order_index is not None:
@@ -2080,16 +1872,7 @@ def replace_textbox_with_chart(
                 # Since we deleted the element at z_order_index, the new element is at the end
                 # We need to move it back to z_order_index
                 # Get current slide state to find the correct new index
-                def _get_updated_presentation_chart_zorder():
-                    return (
-                        slides_service.presentations()
-                        .get(presentationId=presentation_id)
-                        .execute()
-                    )
-
-                updated_presentation = retry_with_exponential_backoff(
-                    _get_updated_presentation_chart_zorder
-                )
+                updated_presentation = slides_service.get_presentation(presentation_id)
                 updated_slides = updated_presentation.get("slides", [])
 
                 for s in updated_slides:
@@ -2125,18 +1908,10 @@ def replace_textbox_with_chart(
                                         }
                                     )
 
-                                def execute_order_update():
-                                    return (
-                                        slides_service.presentations()
-                                        .batchUpdate(
-                                            presentationId=presentation_id,
-                                            body={"requests": order_requests},
-                                        )
-                                        .execute()
-                                    )
-
                                 try:
-                                    retry_with_exponential_backoff(execute_order_update)
+                                    slides_service.batch_update(
+                                        presentation_id, {"requests": order_requests}
+                                    )
                                 except HttpError as order_error:
                                     print(
                                         f"  ⚠️  Warning: Could not restore z-order position: {order_error}"
@@ -2175,16 +1950,11 @@ def replace_textbox_with_image(
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = build("slides", "v1", credentials=creds)
-    drive_service = build("drive", "v3", credentials=creds)
+    slides_service = GSlidesAPI.get_shared_slides_service(creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
 
     # Get the slide to find the z-order index of the textbox
-    def _get_presentation_for_image_replace():
-        return (
-            slides_service.presentations().get(presentationId=presentation_id).execute()
-        )
-
-    presentation = retry_with_exponential_backoff(_get_presentation_for_image_replace)
+    presentation = slides_service.get_presentation(presentation_id)
     presentation_slides = presentation.get("slides", [])
 
     # Find the slide and get its pageElements
@@ -2274,14 +2044,10 @@ def replace_textbox_with_image(
         try:
             # First, check if file already has public access
             try:
-                permissions = (
-                    drive_service.permissions()
-                    .list(
-                        fileId=file_id,
-                        fields="permissions(id,type,role)",
-                        supportsAllDrives=True,
-                    )
-                    .execute()
+                permissions = drive_api.list_permissions(
+                    file_id,
+                    fields="permissions(id,type,role)",
+                    supportsAllDrives=True,
                 )
 
                 # Check if 'anyone' permission already exists
@@ -2302,17 +2068,9 @@ def replace_textbox_with_image(
             if not has_public_access:
                 try:
                     permission = {"type": "anyone", "role": "reader"}
-
-                    def _create_permission():
-                        return (
-                            drive_service.permissions()
-                            .create(
-                                fileId=file_id, body=permission, supportsAllDrives=True
-                            )
-                            .execute()
-                        )
-
-                    result = retry_with_exponential_backoff(_create_permission)
+                    result = drive_api.create_permission(
+                        file_id, body=permission, supportsAllDrives=True
+                    )
                     permission_id = result.get("id")
                     had_public_permission = True
                     print(
@@ -2325,20 +2083,10 @@ def replace_textbox_with_image(
                     )
                     # Try to get webContentLink - this might work if file is already shared
                     try:
-
-                        def _get_file_metadata():
-                            return (
-                                drive_service.files()
-                                .get(
-                                    fileId=file_id,
-                                    fields="webContentLink,webViewLink",
-                                    supportsAllDrives=True,
-                                )
-                                .execute()
-                            )
-
-                        file_metadata = retry_with_exponential_backoff(
-                            _get_file_metadata
+                        file_metadata = drive_api.get_file(
+                            file_id,
+                            fields="webContentLink,webViewLink",
+                            supportsAllDrives=True,
                         )
 
                         web_content_link = file_metadata.get("webContentLink")
@@ -2359,16 +2107,9 @@ def replace_textbox_with_image(
                         )
 
             # Get the public URL for the image
-            def _get_file_metadata_public():
-                return (
-                    drive_service.files()
-                    .get(
-                        fileId=file_id, fields="webContentLink", supportsAllDrives=True
-                    )
-                    .execute()
-                )
-
-            file_metadata = retry_with_exponential_backoff(_get_file_metadata_public)
+            file_metadata = drive_api.get_file(
+                file_id, fields="webContentLink", supportsAllDrives=True
+            )
 
             web_content_link = file_metadata.get("webContentLink")
             if web_content_link:
@@ -2424,15 +2165,8 @@ def replace_textbox_with_image(
     # Execute the batch update with retry logic
     body = {"requests": requests}
 
-    def execute_batch_update():
-        return (
-            slides_service.presentations()
-            .batchUpdate(presentationId=presentation_id, body=body)
-            .execute()
-        )
-
     try:
-        response = retry_with_exponential_backoff(execute_batch_update)
+        response = slides_service.batch_update(presentation_id, body)
 
         # Get the objectId of the newly created image and restore z-order
         if z_order_index is not None:
@@ -2450,11 +2184,7 @@ def replace_textbox_with_image(
                 # Since we deleted the element at z_order_index, the new element is at the end
                 # We need to move it back to z_order_index
                 # Get current slide state to find the correct new index
-                updated_presentation = (
-                    slides_service.presentations()
-                    .get(presentationId=presentation_id)
-                    .execute()
-                )
+                updated_presentation = slides_service.get_presentation(presentation_id)
                 updated_slides = updated_presentation.get("slides", [])
 
                 for s in updated_slides:
@@ -2490,18 +2220,10 @@ def replace_textbox_with_image(
                                         }
                                     )
 
-                                def execute_order_update():
-                                    return (
-                                        slides_service.presentations()
-                                        .batchUpdate(
-                                            presentationId=presentation_id,
-                                            body={"requests": order_requests},
-                                        )
-                                        .execute()
-                                    )
-
                                 try:
-                                    retry_with_exponential_backoff(execute_order_update)
+                                    slides_service.batch_update(
+                                        presentation_id, {"requests": order_requests}
+                                    )
                                 except HttpError as order_error:
                                     print(
                                         f"  ⚠️  Warning: Could not restore z-order position: {order_error}"
@@ -2517,19 +2239,11 @@ def replace_textbox_with_image(
         # Always revoke the temporary public permission, whether insertion succeeded or failed
         if had_public_permission and permission_id and not is_url:
             try:
-
-                def _revoke_permission():
-                    return (
-                        drive_service.permissions()
-                        .delete(
-                            fileId=image_url_or_file_id,
-                            permissionId=permission_id,
-                            supportsAllDrives=True,
-                        )
-                        .execute()
-                    )
-
-                retry_with_exponential_backoff(_revoke_permission)
+                drive_api.delete_permission(
+                    image_url_or_file_id,
+                    permission_id,
+                    supportsAllDrives=True,
+                )
                 print("    ℹ️  Revoked temporary public access from image file")
             except HttpError as revoke_error:
                 print(
@@ -2557,7 +2271,7 @@ def replace_multiple_placeholders_in_textbox(
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = build("slides", "v1", credentials=creds)
+    slides_service = GSlidesAPI.get_shared_slides_service(creds)
 
     shape_id = textbox_element.get("objectId")
 
@@ -2697,15 +2411,8 @@ def replace_multiple_placeholders_in_textbox(
     # Execute the batch update with retry logic
     body = {"requests": requests}
 
-    def execute_batch_update():
-        return (
-            slides_service.presentations()
-            .batchUpdate(presentationId=presentation_id, body=body)
-            .execute()
-        )
-
     try:
-        retry_with_exponential_backoff(execute_batch_update)
+        slides_service.batch_update(presentation_id, body)
         replaced_count = len(placeholder_positions)
         print(f"  ✓ Replaced {replaced_count} placeholder(s) in slide {slide_number}")
         return True
@@ -2770,17 +2477,9 @@ def populate_table_with_data(
                     }
                 }
 
-                def execute_insert_rows():
-                    return (
-                        slides_service.presentations()
-                        .batchUpdate(
-                            presentationId=presentation_id,
-                            body={"requests": [insert_request]},
-                        )
-                        .execute()
-                    )
-
-                retry_with_exponential_backoff(execute_insert_rows)
+                slides_service.batch_update(
+                    presentation_id, {"requests": [insert_request]}
+                )
 
                 # Update for next batch: move insertion point and reduce remaining count
                 current_row_index += rows_in_batch
@@ -2928,18 +2627,9 @@ def populate_table_with_data(
     batch_size = 50
     try:
         for i in range(0, len(requests), batch_size):
-
-            def _batch_update_table():
-                return (
-                    slides_service.presentations()
-                    .batchUpdate(
-                        presentationId=presentation_id,
-                        body={"requests": requests[i : i + batch_size]},
-                    )
-                    .execute()
-                )
-
-            retry_with_exponential_backoff(_batch_update_table)
+            slides_service.batch_update(
+                presentation_id, {"requests": requests[i : i + batch_size]}
+            )
         print(f"  ✓ Populated table on slide {slide_number}")
         return True
     except HttpError as error:
@@ -2973,18 +2663,11 @@ def process_all_slides(
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = build("slides", "v1", credentials=creds)
+    slides_service = GSlidesAPI.get_shared_slides_service(creds)
 
     try:
         # Get the presentation
-        def _get_presentation_process():
-            return (
-                slides_service.presentations()
-                .get(presentationId=presentation_id)
-                .execute()
-            )
-
-        presentation = retry_with_exponential_backoff(_get_presentation_process)
+        presentation = slides_service.get_presentation(presentation_id)
         presentation_slides = presentation.get("slides", [])
 
         # Build lookup dictionaries keyed by placeholder name
@@ -3195,7 +2878,9 @@ def process_all_slides(
 
             # Report slide processing time
             slide_elapsed = time.time() - slide_start_time
-            print(f"Slide {slide_number} processing time: {slide_elapsed:.2f} seconds")
+            print(
+                f"  Slide {slide_number} processing time: {slide_elapsed:.2f} seconds"
+            )
 
         return True
 
@@ -3229,7 +2914,7 @@ def process_spreadsheet(
         str: ID of the created presentation, or None if failed
     """
     # Initialize services
-    gspread_client = gspread.authorize(creds)
+    sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
 
     # Use entity_name from file/folder name
     entity_name = spreadsheet_name
@@ -3237,13 +2922,13 @@ def process_spreadsheet(
     try:
         # Get all worksheets from the spreadsheet
         print("Reading spreadsheet worksheets...")
-        spreadsheet = gspread_client.open_by_key(spreadsheet_id)
-        worksheets = spreadsheet.worksheets()
+        spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
+        worksheets = spreadsheet.get("sheets", [])
 
         # Filter and parse sheets matching the pattern (no slide numbers)
         sheet_mappings = []
-        for worksheet in worksheets:
-            sheet_name = worksheet.title
+        for sheet in worksheets:
+            sheet_name = sheet["properties"]["title"]
             parsed = parse_sheet_name(sheet_name)
             if parsed:
                 placeholder_type, placeholder_name = parsed

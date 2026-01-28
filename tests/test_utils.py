@@ -10,12 +10,13 @@ import time
 import uuid
 from typing import Dict, List, Optional
 
-import gspread
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
 
 from gslides_automator.drive_layout import DriveLayout
+from gslides_automator.gslides_api import GSlidesAPI
+from gslides_automator.gsheets_api import GSheetsAPI
 
 
 def retry_with_exponential_backoff(
@@ -225,7 +226,7 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
         Spreadsheet ID of the created template
     """
     drive_service = build("drive", "v3", credentials=creds)
-    gspread_client = gspread.authorize(creds)
+    sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
 
     # Create spreadsheet
     file_metadata = {
@@ -243,39 +244,64 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
     )
 
     spreadsheet_id = spreadsheet_file.get("id")
-    spreadsheet = gspread_client.open_by_key(spreadsheet_id)
+    spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
+
+    # Helper function to check if sheet exists and get its ID
+    def get_sheet_id(sheet_name):
+        for sheet in spreadsheet.get("sheets", []):
+            if sheet["properties"]["title"] == sheet_name:
+                return sheet["properties"]["sheetId"]
+        return None
+
+    # Helper function to create sheet if it doesn't exist
+    def ensure_sheet_exists(sheet_name, rows=10, cols=5):
+        if get_sheet_id(sheet_name) is None:
+            sheets_api.batch_update(
+                spreadsheet_id,
+                {
+                    "requests": [
+                        {
+                            "addSheet": {
+                                "properties": {
+                                    "title": sheet_name,
+                                    "gridProperties": {
+                                        "rowCount": rows,
+                                        "columnCount": cols,
+                                    },
+                                }
+                            }
+                        }
+                    ]
+                },
+            )
+            # Refresh spreadsheet metadata after adding sheet
+            nonlocal spreadsheet
+            spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
 
     # Create common_data sheet
-    try:
-        common_data_sheet = spreadsheet.add_worksheet(
-            title="common_data",
-            rows=10,
-            cols=5,
-        )
-    except Exception:
-        common_data_sheet = spreadsheet.worksheet("common_data")
+    ensure_sheet_exists("common_data", rows=10, cols=5)
 
     # Add headers and sample data to common_data
-    common_data_sheet.update(
-        range_name="A1:E1",
-        values=[["entity_name", "brand_name", "year", "region", "status"]],
+    sheets_api.update_values(
+        spreadsheet_id,
+        "common_data!A1:E1",
+        [["entity_name", "brand_name", "year", "region", "status"]],
     )
-    common_data_sheet.update(
-        range_name="A2:E2",
-        values=[["entity-1", "TestBrand", "2024", "North", "Active"]],
+    sheets_api.update_values(
+        spreadsheet_id,
+        "common_data!A2:E2",
+        [["entity-1", "TestBrand", "2024", "North", "Active"]],
     )
 
     # Create data sheet for text placeholders
-    try:
-        data_sheet = spreadsheet.add_worksheet(title="data", rows=10, cols=2)
-    except Exception:
-        data_sheet = spreadsheet.worksheet("data")
+    ensure_sheet_exists("data", rows=10, cols=2)
 
     # Add sample placeholder data
-    data_sheet.update(range_name="A1:B1", values=[["placeholder", "value"]])
-    data_sheet.update(
-        range_name="A2:B5",
-        values=[
+    sheets_api.update_values(spreadsheet_id, "data!A1:B1", [["placeholder", "value"]])
+    sheets_api.update_values(
+        spreadsheet_id,
+        "data!A2:B5",
+        [
             ["brand_name_", "TestBrand"],
             ["year_", "2024"],
             ["region_", "North"],
@@ -284,15 +310,15 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
     )
 
     # Create chart sheet
-    try:
-        chart_sheet = spreadsheet.add_worksheet(title="chart-sales", rows=10, cols=3)
-    except Exception:
-        chart_sheet = spreadsheet.worksheet("chart-sales")
+    ensure_sheet_exists("chart-sales", rows=10, cols=3)
 
-    chart_sheet.update(range_name="A1:C1", values=[["Month", "Sales", "Target"]])
-    chart_sheet.update(
-        range_name="A2:C5",
-        values=[
+    sheets_api.update_values(
+        spreadsheet_id, "chart-sales!A1:C1", [["Month", "Sales", "Target"]]
+    )
+    sheets_api.update_values(
+        spreadsheet_id,
+        "chart-sales!A2:C5",
+        [
             ["Jan", "1000", "1200"],
             ["Feb", "1200", "1200"],
             ["Mar", "1500", "1300"],
@@ -301,17 +327,15 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
     )
 
     # Create table sheet
-    try:
-        table_sheet = spreadsheet.add_worksheet(
-            title="table-performance", rows=10, cols=4
-        )
-    except Exception:
-        table_sheet = spreadsheet.worksheet("table-performance")
+    ensure_sheet_exists("table-performance", rows=10, cols=4)
 
-    table_sheet.update(range_name="A1:D1", values=[["Metric", "Q1", "Q2", "Q3"]])
-    table_sheet.update(
-        range_name="A2:D4",
-        values=[
+    sheets_api.update_values(
+        spreadsheet_id, "table-performance!A1:D1", [["Metric", "Q1", "Q2", "Q3"]]
+    )
+    sheets_api.update_values(
+        spreadsheet_id,
+        "table-performance!A2:D4",
+        [
             ["Revenue", "10000", "12000", "15000"],
             ["Profit", "2000", "2500", "3000"],
             ["Growth", "10%", "15%", "20%"],
@@ -319,11 +343,20 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
     )
 
     # Delete default Sheet1 if it exists
-    try:
-        default_sheet = spreadsheet.worksheet("Sheet1")
-        spreadsheet.del_worksheet(default_sheet)
-    except Exception:
-        pass
+    sheet1_id = get_sheet_id("Sheet1")
+    if sheet1_id is not None:
+        sheets_api.batch_update(
+            spreadsheet_id,
+            {
+                "requests": [
+                    {
+                        "deleteSheet": {
+                            "sheetId": sheet1_id,
+                        }
+                    }
+                ]
+            },
+        )
 
     return spreadsheet_id
 
@@ -339,7 +372,7 @@ def create_test_slide_template(templates_folder_id: str, creds) -> str:
     Returns:
         Presentation ID of the created template
     """
-    slides_service = build("slides", "v1", credentials=creds)
+    slides_service = GSlidesAPI.get_shared_slides_service(creds)
     drive_service = build("drive", "v3", credentials=creds)
 
     # Create presentation file directly in the templates folder using Drive API
@@ -363,34 +396,24 @@ def create_test_slide_template(templates_folder_id: str, creds) -> str:
 
     # Now use Slides API to add content to the presentation
     # Get the presentation to check for slides
-    presentation = (
-        slides_service.presentations()
-        .get(
-            presentationId=presentation_id,
-        )
-        .execute()
-    )
+    presentation = slides_service.get_presentation(presentation_id)
 
     # Get the first slide (presentations always have at least one slide)
     slides = presentation.get("slides", [])
     if not slides:
         # Create a slide if none exists (shouldn't happen, but handle it)
-        create_result = (
-            slides_service.presentations()
-            .batchUpdate(
-                presentationId=presentation_id,
-                body={
-                    "requests": [
-                        {
-                            "createSlide": {
-                                "insertionIndex": 0,
-                                "slideLayoutReference": {"predefinedLayout": "BLANK"},
-                            }
+        create_result = slides_service.batch_update(
+            presentation_id,
+            {
+                "requests": [
+                    {
+                        "createSlide": {
+                            "insertionIndex": 0,
+                            "slideLayoutReference": {"predefinedLayout": "BLANK"},
                         }
-                    ]
-                },
-            )
-            .execute()
+                    }
+                ]
+            },
         )
         slide_id = create_result["replies"][0]["createSlide"]["objectId"]
     else:
@@ -469,10 +492,7 @@ def create_test_slide_template(templates_folder_id: str, creds) -> str:
 
     # Execute batch update
     if requests:
-        slides_service.presentations().batchUpdate(
-            presentationId=presentation_id,
-            body={"requests": requests},
-        ).execute()
+        slides_service.batch_update(presentation_id, {"requests": requests})
 
     return presentation_id
 
@@ -689,12 +709,23 @@ def get_spreadsheet_data(
     Returns:
         List of rows (each row is a list of strings), or None if error
     """
-    gspread_client = gspread.authorize(creds)
+    sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
 
     try:
-        spreadsheet = gspread_client.open_by_key(spreadsheet_id)
-        worksheet = spreadsheet.worksheet(sheet_name)
-        return worksheet.get_all_values()
+        # Check if sheet exists
+        spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
+        sheet_exists = False
+        for sheet in spreadsheet.get("sheets", []):
+            if sheet["properties"]["title"] == sheet_name:
+                sheet_exists = True
+                break
+
+        if not sheet_exists:
+            return None
+
+        # Get all values from the sheet
+        value_range = sheets_api.get_values(spreadsheet_id, sheet_name)
+        return value_range.get("values", [])
     except Exception:
         return None
 
