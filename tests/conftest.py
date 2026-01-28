@@ -11,6 +11,7 @@ import uuid
 from googleapiclient.discovery import build
 
 from gslides_automator.auth import get_oauth_credentials
+from gslides_automator.gsheets_api import GSheetsAPI
 from tests.test_utils import (
     create_test_drive_structure,
     create_test_entities_csv,
@@ -19,7 +20,6 @@ from tests.test_utils import (
     create_test_l0_data,
     execute_with_retry,
 )
-
 
 @pytest.fixture(scope="session")
 def test_credentials(tmp_path_factory):

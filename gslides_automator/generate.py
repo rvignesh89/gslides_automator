@@ -109,7 +109,13 @@ def generate_entity(entity_flags: EntityFlags, creds, layout: DriveLayout) -> No
         if len(spreadsheets) > 1:
             print("  ⚠️  Multiple spreadsheets found, using the first one")
 
-        spreadsheet_id, spreadsheet_name = spreadsheets[0]
+        # Ensure the first spreadsheet tuple has 2 elements
+        first_spreadsheet = spreadsheets[0]
+        if not isinstance(first_spreadsheet, tuple) or len(first_spreadsheet) != 2:
+            raise Exception(
+                f"Invalid spreadsheet data format for entity '{entity_name}': expected tuple of (id, name), got {first_spreadsheet}"
+            )
+        spreadsheet_id, spreadsheet_name = first_spreadsheet
 
         # Convert empty set (all slides) to None for l2_process_spreadsheet
         slides_to_process = None if entity_flags.l2 == set() else entity_flags.l2

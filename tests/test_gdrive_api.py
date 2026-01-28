@@ -12,23 +12,11 @@ import pytest
 from googleapiclient.errors import HttpError
 
 from gslides_automator.gdrive_api import GDriveAPI
-from gslides_automator.token_bucket import TokenBucket
+from gslides_automator.leaky_bucket import LeakyBucket
 
 
 class TestGDriveAPI:
-    """Test GDriveAPI singleton and rate limiting."""
-
-    def test_singleton_pattern(self):
-        """Test that GDriveAPI is a singleton."""
-        mock_creds = MagicMock()
-
-        # Reset singleton
-        GDriveAPI._instance = None
-
-        instance1 = GDriveAPI.get_instance(mock_creds)
-        instance2 = GDriveAPI.get_instance(mock_creds)
-
-        assert instance1 is instance2
+    """Test GDriveAPI rate limiting."""
 
     @patch("gslides_automator.gdrive_api.build")
     def test_list_files(self, mock_build):
@@ -44,11 +32,8 @@ class TestGDriveAPI:
         mock_files.list.return_value = mock_list
         mock_list.execute = mock_execute
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
         # Call list_files
         result = api.list_files(query="name='test.txt'")
@@ -71,11 +56,8 @@ class TestGDriveAPI:
         mock_files.get.return_value = mock_get
         mock_get.execute = mock_execute
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
         # Call get_file
         result = api.get_file("file1")
@@ -98,11 +80,8 @@ class TestGDriveAPI:
         mock_files.create.return_value = mock_create
         mock_create.execute = mock_execute
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
         # Call create_file
         body = {"name": "test.txt", "mimeType": "text/plain"}
@@ -126,11 +105,8 @@ class TestGDriveAPI:
         mock_files.update.return_value = mock_update
         mock_update.execute = mock_execute
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
         # Call update_file
         body = {"name": "updated.txt"}
@@ -154,11 +130,8 @@ class TestGDriveAPI:
         mock_files.delete.return_value = mock_delete
         mock_delete.execute = mock_execute
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
         # Call delete_file
         result = api.delete_file("file1")
@@ -179,11 +152,8 @@ class TestGDriveAPI:
         mock_service.files.return_value = mock_files
         mock_files.get_media.return_value = mock_get_media
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
         # Call get_media
         result = api.get_media("file1")
@@ -204,11 +174,8 @@ class TestGDriveAPI:
         mock_service.files.return_value = mock_files
         mock_files.export.return_value = mock_export
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
         # Call export_file
         result = api.export_file("file1", "application/pdf")
@@ -231,11 +198,8 @@ class TestGDriveAPI:
         mock_files.copy.return_value = mock_copy
         mock_copy.execute = mock_execute
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
         # Call copy_file
         body = {"name": "copied.txt"}
@@ -259,11 +223,8 @@ class TestGDriveAPI:
         mock_permissions.list.return_value = mock_list
         mock_list.execute = mock_execute
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
         # Call list_permissions
         result = api.list_permissions("file1")
@@ -286,11 +247,8 @@ class TestGDriveAPI:
         mock_permissions.create.return_value = mock_create
         mock_create.execute = mock_execute
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
         # Call create_permission
         body = {"type": "anyone", "role": "reader"}
@@ -319,11 +277,8 @@ class TestGDriveAPI:
         mock_files.get.return_value = mock_get
         mock_get.execute = mock_execute
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
         # Call get_file
         with patch("time.sleep"):  # Mock sleep to speed up test
@@ -352,11 +307,8 @@ class TestGDriveAPI:
         mock_files.get.return_value = mock_get
         mock_get.execute = mock_execute
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
         # Call get_file
         with patch("time.sleep"):  # Mock sleep to speed up test
@@ -383,11 +335,8 @@ class TestGDriveAPI:
         mock_files.get.return_value = mock_get
         mock_get.execute = mock_execute
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
         # Call get_file - should raise immediately
         with pytest.raises(HttpError):
@@ -410,24 +359,25 @@ class TestGDriveAPI:
         mock_files.get.return_value = mock_get
         mock_get.execute = mock_execute
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
-        # Replace token bucket with reduced limits (2 per minute = 1 per 30 seconds)
-        api.token_bucket = TokenBucket(read_rate=2.0, write_rate=None)
-        api.token_bucket.read_tokens = 0.0  # Start with no tokens
+        # Replace token bucket with reduced limits (2 per minute = 30 seconds between calls)
+        api.token_bucket = LeakyBucket(read_rate=2.0, write_rate=None)
 
-        # First call should block
+        # First call should be immediate
+        result1 = api.get_file("file1")
+        assert result1 == {"id": "file1", "name": "test.txt"}
+
+        # Second call should wait approximately 30 seconds
         start_time = time.time()
-        result = api.get_file("file1")
+        result2 = api.get_file("file1")
         elapsed = time.time() - start_time
 
-        # Should have waited for token
-        assert elapsed >= 25.0  # At least 25 seconds
-        assert result == {"id": "file1", "name": "test.txt"}
+        # Should have waited approximately 30 seconds
+        assert elapsed >= 29.0  # At least 29 seconds
+        assert elapsed < 35.0  # But not too long
+        assert result2 == {"id": "file1", "name": "test.txt"}
 
     @patch("gslides_automator.gdrive_api.build")
     def test_debug_logging_on_rate_limit(self, mock_build, caplog):
@@ -443,23 +393,22 @@ class TestGDriveAPI:
         mock_files.get.return_value = mock_get
         mock_get.execute = mock_execute
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
         # Replace token bucket with very low rate to trigger rate limiting
-        api.token_bucket = TokenBucket(read_rate=2.0, write_rate=None)
-        api.token_bucket.read_tokens = 0.0  # Start with no tokens
+        api.token_bucket = LeakyBucket(read_rate=2.0, write_rate=None)
 
         # Enable debug logging
         with caplog.at_level(logging.DEBUG):
+            # First call - immediate, no wait log
+            api.get_file("file1")
+            # Second call - should wait and log
             api.get_file("file1")
 
-        # Check that debug logs were emitted
-        assert any("Rate limit - waiting for operation token" in record.message for record in caplog.records)
-        assert any("Rate limit - operation token acquired, proceeding" in record.message for record in caplog.records)
+        # Check that debug logs were emitted for the second call
+        assert any("Rate limit - waiting" in record.message and "operation" in record.message for record in caplog.records)
+        assert any("Rate limit - operation allowed" in record.message for record in caplog.records)
 
     @patch("gslides_automator.gdrive_api.build")
     def test_no_logging_when_no_rate_limit(self, mock_build, caplog):
@@ -475,11 +424,8 @@ class TestGDriveAPI:
         mock_files.get.return_value = mock_get
         mock_get.execute = mock_execute
 
-        # Reset singleton
-        GDriveAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GDriveAPI.get_instance(mock_creds)
+        api = GDriveAPI(mock_creds)
 
         # Enable debug logging
         with caplog.at_level(logging.DEBUG):

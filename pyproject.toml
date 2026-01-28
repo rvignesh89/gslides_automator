@@ -56,5 +56,6 @@ markers = [
     "unit: Unit tests",
     "integration: Integration tests",
     "e2e: End-to-end tests",
+    "serial: Tests that must run serially (not in parallel with other tests)",
 ]
 

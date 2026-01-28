@@ -340,7 +340,7 @@ def create_test_slide_template(templates_folder_id: str, creds) -> str:
     Returns:
         Presentation ID of the created template
     """
-    slides_service = GSlidesAPI.get_instance(creds)
+    slides_service = GSlidesAPI.get_shared_slides_service(creds)
     drive_service = build("drive", "v3", credentials=creds)
 
     # Create presentation file directly in the templates folder using Drive API

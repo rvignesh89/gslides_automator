@@ -2,34 +2,36 @@
 """
 Google Sheets API service with token bucket rate limiting.
 
-This module provides a singleton GSheetsAPI service that wraps Google Sheets API calls
+This module provides a GSheetsAPI service that wraps Google Sheets API calls
 with rate limiting (60 reads/min, 60 writes/min) and automatic retry logic for 429 errors.
+
+The module provides a shared service instance via get_shared_sheets_service() for
+use across the codebase to maintain rate limiting.
 """
 
 from __future__ import annotations
 import logging
-import random
 import threading
-import time
 from typing import Optional
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 
-from gslides_automator.token_bucket import TokenBucket
+from gslides_automator.leaky_bucket import LeakyBucket
+from gslides_automator.utils import retry_with_exponential_backoff
 
 logger = logging.getLogger(__name__)
+
+# Module-level shared service instance
+_service: Optional[GSheetsAPI] = None
+_service_lock = threading.Lock()
 
 
 class GSheetsAPI:
     """
-    Singleton service that wraps Google Sheets API with rate limiting and retry logic.
+    Service that wraps Google Sheets API with rate limiting and retry logic.
 
     Provides rate-limited access to Google Sheets API operations with automatic
     retry on 429 errors using exponential backoff.
     """
-
-    _instance: Optional[GSheetsAPI] = None
-    _lock = threading.Lock()
 
     def __init__(self, creds):
         """
@@ -42,92 +44,39 @@ class GSheetsAPI:
         self.service = build("sheets", "v4", credentials=creds)
         # Initialize token bucket with Google Sheets API limits
         # 60 reads/min, 60 writes/min (conservative per-user limits)
-        self.token_bucket = TokenBucket(read_rate=60.0, write_rate=60.0)
+        self.token_bucket = LeakyBucket(read_rate=60.0, write_rate=60.0)
 
-    @classmethod
-    def get_instance(cls, creds) -> GSheetsAPI:
+    def get_shared_sheets_service(creds) -> GSheetsAPI:
         """
-        Get or create the singleton instance of GSheetsAPI.
+        Get or create the shared GSheetsAPI service instance.
+
+        This function provides a module-level shared service instance that maintains
+        rate limiting across all API calls in the application.
 
         Args:
             creds: Google OAuth credentials
 
         Returns:
-            GSheetsAPI instance
+            GSheetsAPI instance (shared across the application)
         """
-        if cls._instance is None:
-            with cls._lock:
-                # Double-check pattern
-                if cls._instance is None:
-                    cls._instance = cls(creds)
-        return cls._instance
+        global _service
+        if _service is None:
+            with _service_lock:
+                # Double-check pattern for thread safety
+                if _service is None:
+                    _service = GSheetsAPI(creds)
+        return _service
 
-    def _retry_with_exponential_backoff(
-        self,
-        func,
-        max_retries=5,
-        initial_delay=1,
-        max_delay=60,
-        backoff_factor=2,
-    ):
-        """
-        Retry a function with exponential backoff on 429 and 5xx errors.
+    def reset_service():
+            """
+            Reset the shared service instance (useful for testing).
 
-        Args:
-            func: Function to retry (should be a callable that takes no arguments)
-            max_retries: Maximum number of retry attempts (default: 5)
-            initial_delay: Initial delay in seconds before first retry (default: 1)
-            max_delay: Maximum delay in seconds between retries (default: 60)
-            backoff_factor: Factor to multiply delay by after each retry (default: 2)
-
-        Returns:
-            The return value of func() if successful
-
-        Raises:
-            HttpError: If the error is not retryable or if max_retries is exceeded
-            Exception: Any other exception raised by func()
-        """
-        delay = initial_delay
-
-        for attempt in range(max_retries + 1):
-            try:
-                return func()
-            except HttpError as error:
-                status = error.resp.status
-                # Check if it's a retryable error (429 Too Many Requests or 5xx Server Errors)
-                is_retryable = (status == 429) or (500 <= status < 600)
-
-                if is_retryable:
-                    if attempt < max_retries:
-                        # Calculate wait time with exponential backoff and random jitter
-                        base_wait_time = min(delay, max_delay)
-                        # Add random jitter: ±20% of the base wait time
-                        jitter = base_wait_time * 0.2 * (2 * random.random() - 1)
-                        wait_time = max(0.1, base_wait_time + jitter)  # Ensure minimum 0.1s
-                        if status == 429:
-                            error_msg = "Rate limit exceeded (429)"
-                        else:
-                            error_msg = f"Server error ({status})"
-                        print(
-                            f"  ⚠️  {error_msg}. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})"
-                        )
-                        time.sleep(wait_time)
-                        delay *= backoff_factor
-                    else:
-                        if status == 429:
-                            error_msg = "Rate limit exceeded (429)"
-                        else:
-                            error_msg = f"Server error ({status})"
-                        print(
-                            f"  ✗ {error_msg}. Max retries ({max_retries}) reached."
-                        )
-                        raise
-                else:
-                    # For non-retryable errors, re-raise immediately
-                    raise
-            except Exception:
-                # For non-HttpError exceptions, re-raise immediately
-                raise
+            This function is thread-safe and should be used in test fixtures
+            to ensure test isolation when needed.
+            """
+            global _service
+            with _service_lock:
+                _service = None
 
     def get_spreadsheet(self, spreadsheet_id: str, **kwargs):
         """
@@ -151,7 +100,7 @@ class GSheetsAPI:
                 .execute()
             )
 
-        return self._retry_with_exponential_backoff(_get)
+        return retry_with_exponential_backoff(_get)
 
     def get_values(self, spreadsheet_id: str, range_name: str, **kwargs):
         """
@@ -177,7 +126,7 @@ class GSheetsAPI:
                 .execute()
             )
 
-        return self._retry_with_exponential_backoff(_get)
+        return retry_with_exponential_backoff(_get)
 
     def update_values(
         self,
@@ -219,7 +168,7 @@ class GSheetsAPI:
                 .execute()
             )
 
-        return self._retry_with_exponential_backoff(_update)
+        return retry_with_exponential_backoff(_update)
 
     def batch_update_values(self, spreadsheet_id: str, data: list, **kwargs):
         """
@@ -246,7 +195,7 @@ class GSheetsAPI:
                 .execute()
             )
 
-        return self._retry_with_exponential_backoff(_batch_update)
+        return retry_with_exponential_backoff(_batch_update)
 
     def batch_update(self, spreadsheet_id: str, body: dict, **kwargs):
         """
@@ -273,4 +222,4 @@ class GSheetsAPI:
                 .execute()
             )
 
-        return self._retry_with_exponential_backoff(_batch_update)
+        return retry_with_exponential_backoff(_batch_update)

@@ -13,6 +13,7 @@ import pytest
 from gslides_automator.leaky_bucket import LeakyBucket
 
 
+@pytest.mark.serial
 class TestLeakyBucketDualBucket:
     """Test LeakyBucket in dual-bucket mode (read/write)."""
 
@@ -152,6 +153,7 @@ class TestLeakyBucketDualBucket:
         # All calls should have completed (thread safety verified by no exceptions)
 
 
+@pytest.mark.serial
 class TestLeakyBucketSingleBucket:
     """Test LeakyBucket in single-bucket mode (for Drive API)."""
 
@@ -265,12 +267,3 @@ class TestLeakyBucketSingleBucket:
         # Check that debug logs were emitted for the second call
         assert any("Rate limit - waiting" in record.message and "operation" in record.message for record in caplog.records)
         assert any("Rate limit - operation allowed" in record.message for record in caplog.records)
-
-
-# Backward compatibility tests using TokenBucket alias
-class TestTokenBucketDualBucket(TestLeakyBucketDualBucket):
-    """Test TokenBucket alias (backward compatibility)."""
-
-    def test_token_bucket_alias(self):
-        """Test that TokenBucket is an alias for LeakyBucket."""
-        assert TokenBucket is LeakyBucket

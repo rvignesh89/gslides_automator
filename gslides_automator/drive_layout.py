@@ -134,20 +134,6 @@ def retry_with_exponential_backoff(
                 # For non-retryable errors, re-raise immediately
                 raise
 
-
-def execute_with_retry(request):
-    """
-    Execute a Google API request with rate limit retry.
-
-    Args:
-        request: A Google API request object (e.g., from drive_service.files().get())
-
-    Returns:
-        The result of request.execute()
-    """
-    return retry_with_exponential_backoff(lambda: request.execute())
-
-
 def _find_child_by_name(
     drive_api,
     parent_id: str,
@@ -226,7 +212,7 @@ def resolve_layout(shared_drive_url: str, creds) -> DriveLayout:
     - L3-PDF
     - Templates
     """
-    drive_api = GDriveAPI.get_instance(creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
     root_id = _extract_id_from_url(shared_drive_url)
 
     # Optional folders - create if missing
@@ -275,7 +261,7 @@ def load_entities(entities_csv_id: str, creds) -> List[str]:
     (second column) is exactly `Y`. Works with both old format (Entity, Generate, Slides)
     and new format (Entity, L1, L2, L3).
     """
-    drive_api = GDriveAPI.get_instance(creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
     request = drive_api.get_media(
         entities_csv_id, supportsAllDrives=True
     )
@@ -378,7 +364,7 @@ def load_entities_with_slides(
     A value of None means all slides.
     Works with both old format (Entity, Generate, Slides) and new format (Entity, L1, L2, L3).
     """
-    drive_api = GDriveAPI.get_instance(creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
     request = drive_api.get_media(
         entities_csv_id, supportsAllDrives=True
     )
@@ -451,7 +437,7 @@ def load_entities_with_flags(entities_csv_id: str, creds) -> List[EntityFlags]:
     Returns:
         List of EntityFlags objects
     """
-    drive_api = GDriveAPI.get_instance(creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
     request = drive_api.get_media(
         entities_csv_id, supportsAllDrives=True
     )

@@ -38,7 +38,7 @@ def list_entity_folders(parent_folder_id, creds):
     Returns:
         list: List of tuples (folder_id, folder_name)
     """
-    drive_api = GDriveAPI.get_instance(creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
     folders = []
 
     try:
@@ -56,7 +56,9 @@ def list_entity_folders(parent_folder_id, creds):
         items = results.get("files", [])
 
         for item in items:
-            folders.append((item["id"], item["name"]))
+            # Ensure item has both id and name before creating tuple
+            if isinstance(item, dict) and "id" in item and "name" in item:
+                folders.append((item["id"], item["name"]))
 
         return folders
 
@@ -76,7 +78,7 @@ def list_spreadsheets_in_folder(folder_id, creds):
     Returns:
         list: List of tuples (spreadsheet_id, spreadsheet_name)
     """
-    drive_api = GDriveAPI.get_instance(creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
     spreadsheets = []
 
     try:
@@ -94,7 +96,9 @@ def list_spreadsheets_in_folder(folder_id, creds):
         items = results.get("files", [])
 
         for item in items:
-            spreadsheets.append((item["id"], item["name"]))
+            # Ensure item has both id and name before creating tuple
+            if isinstance(item, dict) and "id" in item and "name" in item:
+                spreadsheets.append((item["id"], item["name"]))
 
         return spreadsheets
 
@@ -268,7 +272,7 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
     Returns:
         bool: True if a presentation was found and deleted, False otherwise
     """
-    drive_api = GDriveAPI.get_instance(creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
 
     try:
         # Search for existing presentation with the expected name
@@ -390,7 +394,7 @@ def find_existing_presentation(entity_name, output_folder_id, creds):
     Returns:
         str: Presentation ID if found, None otherwise
     """
-    drive_api = GDriveAPI.get_instance(creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
 
     try:
         # Search for existing presentation with the expected name
@@ -461,7 +465,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
     import copy
     import uuid
 
-    slides_service = GSlidesAPI.get_instance(creds)
+    slides_service = GSlidesAPI.get_shared_slides_service(creds)
 
     try:
         # Get template and target presentations
@@ -1513,7 +1517,7 @@ def copy_template_presentation(spreadsheet_name, template_id, output_folder_id, 
     Returns:
         str: ID of the copied presentation
     """
-    drive_api = GDriveAPI.get_instance(creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
 
     # Copy the template
     print("Copying template presentation...")
@@ -1569,7 +1573,7 @@ def get_chart_id_from_sheet(spreadsheet_id, sheet_name, creds):
     Returns:
         int: Chart ID, or None if not found
     """
-    sheets_api = GSheetsAPI.get_instance(creds)
+    sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
 
     try:
         # Get the spreadsheet to find charts
@@ -1605,7 +1609,7 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
     Returns:
         str: Image file ID that can be used to get public URL, or None if not found
     """
-    drive_api = GDriveAPI.get_instance(creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
 
     try:
         # Construct expected filename: picture-<picture_name>
@@ -1709,8 +1713,8 @@ def replace_textbox_with_chart(
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = GSlidesAPI.get_instance(creds)
-    sheets_api = GSheetsAPI.get_instance(creds)
+    slides_service = GSlidesAPI.get_shared_slides_service(creds)
+    sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
 
     # Get the slide to find the z-order index of the textbox
     presentation = slides_service.get_presentation(presentation_id)
@@ -1935,8 +1939,8 @@ def replace_textbox_with_image(
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = GSlidesAPI.get_instance(creds)
-    drive_api = GDriveAPI.get_instance(creds)
+    slides_service = GSlidesAPI.get_shared_slides_service(creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
 
     # Get the slide to find the z-order index of the textbox
     presentation = slides_service.get_presentation(presentation_id)
@@ -2257,7 +2261,7 @@ def replace_multiple_placeholders_in_textbox(
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = GSlidesAPI.get_instance(creds)
+    slides_service = GSlidesAPI.get_shared_slides_service(creds)
 
     shape_id = textbox_element.get("objectId")
 
@@ -2652,7 +2656,7 @@ def process_all_slides(
     Returns:
         bool: True if successful, False otherwise
     """
-    slides_service = GSlidesAPI.get_instance(creds)
+    slides_service = GSlidesAPI.get_shared_slides_service(creds)
 
     try:
         # Get the presentation

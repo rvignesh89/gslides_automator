@@ -38,7 +38,7 @@ def export_slide_to_pdf(
     Returns:
         bool: True if successful, False otherwise
     """
-    drive_api = GDriveAPI.get_instance(creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
 
     print(f"  Exporting slide to PDF for {entity_name}...")
 

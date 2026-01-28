@@ -12,23 +12,11 @@ import pytest
 from googleapiclient.errors import HttpError
 
 from gslides_automator.gsheets_api import GSheetsAPI
-from gslides_automator.token_bucket import TokenBucket
+from gslides_automator.leaky_bucket import LeakyBucket
 
 
 class TestGSheetsAPI:
-    """Test GSheetsAPI singleton and rate limiting."""
-
-    def test_singleton_pattern(self):
-        """Test that GSheetsAPI is a singleton."""
-        mock_creds = MagicMock()
-
-        # Reset singleton
-        GSheetsAPI._instance = None
-
-        instance1 = GSheetsAPI.get_instance(mock_creds)
-        instance2 = GSheetsAPI.get_instance(mock_creds)
-
-        assert instance1 is instance2
+    """Test GSheetsAPI rate limiting."""
 
     @patch("gslides_automator.gsheets_api.build")
     def test_get_spreadsheet(self, mock_build):
@@ -44,11 +32,8 @@ class TestGSheetsAPI:
         mock_spreadsheets.get.return_value = mock_get
         mock_get.execute = mock_execute
 
-        # Reset singleton
-        GSheetsAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GSheetsAPI.get_instance(mock_creds)
+        api = GSheetsAPI(mock_creds)
 
         # Call get_spreadsheet
         result = api.get_spreadsheet("test-id")
@@ -73,11 +58,8 @@ class TestGSheetsAPI:
         mock_values.get.return_value = mock_get
         mock_get.execute = mock_execute
 
-        # Reset singleton
-        GSheetsAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GSheetsAPI.get_instance(mock_creds)
+        api = GSheetsAPI(mock_creds)
 
         # Call get_values
         result = api.get_values("test-id", "Sheet1!A1:B2")
@@ -102,11 +84,8 @@ class TestGSheetsAPI:
         mock_values.update.return_value = mock_update
         mock_update.execute = mock_execute
 
-        # Reset singleton
-        GSheetsAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GSheetsAPI.get_instance(mock_creds)
+        api = GSheetsAPI(mock_creds)
 
         # Call update_values
         values = [["A1", "B1"], ["A2", "B2"]]
@@ -137,11 +116,8 @@ class TestGSheetsAPI:
         mock_values.batchUpdate.return_value = mock_batch_update
         mock_batch_update.execute = mock_execute
 
-        # Reset singleton
-        GSheetsAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GSheetsAPI.get_instance(mock_creds)
+        api = GSheetsAPI(mock_creds)
 
         # Call batch_update_values
         data = [{"range": "Sheet1!A1:B2", "values": [["A1", "B1"]]}]
@@ -165,11 +141,8 @@ class TestGSheetsAPI:
         mock_spreadsheets.batchUpdate.return_value = mock_batch_update
         mock_batch_update.execute = mock_execute
 
-        # Reset singleton
-        GSheetsAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GSheetsAPI.get_instance(mock_creds)
+        api = GSheetsAPI(mock_creds)
 
         # Call batch_update
         body = {"requests": [{"addSheet": {"properties": {"title": "NewSheet"}}}]}
@@ -198,11 +171,8 @@ class TestGSheetsAPI:
         mock_spreadsheets.get.return_value = mock_get
         mock_get.execute = mock_execute
 
-        # Reset singleton
-        GSheetsAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GSheetsAPI.get_instance(mock_creds)
+        api = GSheetsAPI(mock_creds)
 
         # Call get_spreadsheet
         with patch("time.sleep"):  # Mock sleep to speed up test
@@ -231,11 +201,8 @@ class TestGSheetsAPI:
         mock_spreadsheets.get.return_value = mock_get
         mock_get.execute = mock_execute
 
-        # Reset singleton
-        GSheetsAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GSheetsAPI.get_instance(mock_creds)
+        api = GSheetsAPI(mock_creds)
 
         # Call get_spreadsheet
         with patch("time.sleep"):  # Mock sleep to speed up test
@@ -262,11 +229,8 @@ class TestGSheetsAPI:
         mock_spreadsheets.get.return_value = mock_get
         mock_get.execute = mock_execute
 
-        # Reset singleton
-        GSheetsAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GSheetsAPI.get_instance(mock_creds)
+        api = GSheetsAPI(mock_creds)
 
         # Call get_spreadsheet - should raise immediately
         with pytest.raises(HttpError):
@@ -289,24 +253,25 @@ class TestGSheetsAPI:
         mock_spreadsheets.get.return_value = mock_get
         mock_get.execute = mock_execute
 
-        # Reset singleton
-        GSheetsAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GSheetsAPI.get_instance(mock_creds)
+        api = GSheetsAPI(mock_creds)
 
-        # Replace token bucket with reduced limits (2 reads/min = 1 read per 30 seconds)
-        api.token_bucket = TokenBucket(read_rate=2.0, write_rate=1.0)
-        api.token_bucket.read_tokens = 0.0  # Start with no tokens
+        # Replace token bucket with reduced limits (2 reads/min = 30 seconds between calls)
+        api.token_bucket = LeakyBucket(read_rate=2.0, write_rate=1.0)
 
-        # First call should block
+        # First call should be immediate
+        result1 = api.get_spreadsheet("test-id")
+        assert result1 == {"spreadsheetId": "test-id", "sheets": []}
+
+        # Second call should wait approximately 30 seconds
         start_time = time.time()
-        result = api.get_spreadsheet("test-id")
+        result2 = api.get_spreadsheet("test-id")
         elapsed = time.time() - start_time
 
-        # Should have waited for token
-        assert elapsed >= 25.0  # At least 25 seconds
-        assert result == {"spreadsheetId": "test-id", "sheets": []}
+        # Should have waited approximately 30 seconds
+        assert elapsed >= 29.0  # At least 29 seconds
+        assert elapsed < 35.0  # But not too long
+        assert result2 == {"spreadsheetId": "test-id", "sheets": []}
 
     @patch("gslides_automator.gsheets_api.build")
     def test_debug_logging_on_rate_limit(self, mock_build, caplog):
@@ -322,23 +287,22 @@ class TestGSheetsAPI:
         mock_spreadsheets.get.return_value = mock_get
         mock_get.execute = mock_execute
 
-        # Reset singleton
-        GSheetsAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GSheetsAPI.get_instance(mock_creds)
+        api = GSheetsAPI(mock_creds)
 
         # Replace token bucket with very low rate to trigger rate limiting
-        api.token_bucket = TokenBucket(read_rate=2.0, write_rate=1.0)
-        api.token_bucket.read_tokens = 0.0  # Start with no tokens
+        api.token_bucket = LeakyBucket(read_rate=2.0, write_rate=1.0)
 
         # Enable debug logging
         with caplog.at_level(logging.DEBUG):
+            # First call - immediate, no wait log
+            api.get_spreadsheet("test-id")
+            # Second call - should wait and log
             api.get_spreadsheet("test-id")
 
-        # Check that debug logs were emitted
-        assert any("Rate limit - waiting for read token" in record.message for record in caplog.records)
-        assert any("Rate limit - read token acquired, proceeding" in record.message for record in caplog.records)
+        # Check that debug logs were emitted for the second call
+        assert any("Rate limit - waiting" in record.message and "read" in record.message for record in caplog.records)
+        assert any("Rate limit - read operation allowed" in record.message for record in caplog.records)
 
     @patch("gslides_automator.gsheets_api.build")
     def test_no_logging_when_no_rate_limit(self, mock_build, caplog):
@@ -354,11 +318,8 @@ class TestGSheetsAPI:
         mock_spreadsheets.get.return_value = mock_get
         mock_get.execute = mock_execute
 
-        # Reset singleton
-        GSheetsAPI._instance = None
-
         mock_creds = MagicMock()
-        api = GSheetsAPI.get_instance(mock_creds)
+        api = GSheetsAPI(mock_creds)
 
         # Enable debug logging
         with caplog.at_level(logging.DEBUG):

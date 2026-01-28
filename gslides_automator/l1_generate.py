@@ -14,7 +14,6 @@ from gslides_automator.gdrive_api import GDriveAPI
 from gslides_automator.gsheets_api import GSheetsAPI
 import gspread
 import os
-import time
 import csv
 import io
 
@@ -22,81 +21,6 @@ import io
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
-
-
-def retry_with_exponential_backoff(
-    func, max_retries=5, initial_delay=1, max_delay=60, backoff_factor=2
-):
-    """
-    Retry a function with exponential backoff on 429 (Too Many Requests) and 5xx (Server) errors.
-
-    Args:
-        func: Function to retry (should be a callable that takes no arguments)
-        max_retries: Maximum number of retry attempts (default: 5)
-        initial_delay: Initial delay in seconds before first retry (default: 1)
-        max_delay: Maximum delay in seconds between retries (default: 60)
-        backoff_factor: Factor to multiply delay by after each retry (default: 2)
-
-    Returns:
-        The return value of func() if successful
-
-    Raises:
-        HttpError: If the error is not retryable or if max_retries is exceeded
-        Exception: Any other exception raised by func()
-    """
-    delay = initial_delay
-
-    for attempt in range(max_retries + 1):
-        try:
-            return func()
-        except HttpError as error:
-            status = error.resp.status
-            # Check if it's a retryable error (429 Too Many Requests or 5xx Server Errors)
-            is_retryable = (status == 429) or (500 <= status < 600)
-
-            if is_retryable:
-                if attempt < max_retries:
-                    # Calculate wait time with exponential backoff
-                    wait_time = min(delay, max_delay)
-                    if status == 429:
-                        error_msg = "Rate limit exceeded (429)"
-                    else:
-                        error_msg = f"Server error ({status})"
-                    print(
-                        f"    ⚠️  {error_msg}. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})"
-                    )
-                    time.sleep(wait_time)
-                    delay *= backoff_factor
-                else:
-                    if status == 429:
-                        error_msg = "Rate limit exceeded (429)"
-                    else:
-                        error_msg = f"Server error ({status})"
-                    print(f"    ✗ {error_msg}. Max retries ({max_retries}) reached.")
-                    raise
-            else:
-                # For non-retryable errors, re-raise immediately
-                raise
-        except Exception as e:
-            # For non-HttpError exceptions, check if it's a gspread rate limit error
-            error_str = str(e).lower()
-            if "429" in error_str or "rate limit" in error_str or "quota" in error_str:
-                if attempt < max_retries:
-                    wait_time = min(delay, max_delay)
-                    print(
-                        f"    ⚠️  Rate limit error. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})"
-                    )
-                    time.sleep(wait_time)
-                    delay *= backoff_factor
-                else:
-                    print(
-                        f"    ✗ Rate limit error. Max retries ({max_retries}) reached."
-                    )
-                    raise
-            else:
-                # For non-retryable errors, re-raise immediately
-                raise
-
 
 def find_existing_file(drive_api, file_name, folder_id):
     """
@@ -341,7 +265,7 @@ def list_csv_files_in_folder(drive_api, folder_id):
             includeItemsFromAllDrives=True,
         )
         files = results.get("files", [])
-        return [(f["id"], f["name"]) for f in files]
+        return [(f["id"], f["name"]) for f in files if isinstance(f, dict) and "id" in f and "name" in f]
     except HttpError as error:
         print(f"Error listing CSV files in folder: {error}")
         return []
@@ -494,7 +418,7 @@ def write_csv_to_sheet_tab(gspread_client, spreadsheet_id, tab_name, csv_data, c
 
     # Use GSheetsAPI to write data with proper types
     try:
-        sheets_api = GSheetsAPI.get_instance(creds)
+        sheets_api = GSheetsAPI.get_shared_sheets_service(creds)
         range_name = f"{tab_name}!A1"
         sheets_api.update_values(
             spreadsheet_id,
@@ -541,7 +465,7 @@ def list_image_files_in_folder(drive_api, folder_id):
             includeItemsFromAllDrives=True,
         )
         files = results.get("files", [])
-        return [(f["id"], f["name"]) for f in files]
+        return [(f["id"], f["name"]) for f in files if isinstance(f, dict) and "id" in f and "name" in f]
     except HttpError as error:
         print(f"Error listing image files in folder: {error}")
         return []
@@ -623,7 +547,7 @@ def process_entity(entity_name, creds, layout: DriveLayout):
     Returns:
         bool: True if successful, False otherwise
     """
-    drive_api = GDriveAPI.get_instance(creds)
+    drive_api = GDriveAPI.get_shared_drive_service(creds)
     gspread_client = gspread.authorize(creds)
 
     l1_root_id = layout.l1_merged_id
