@@ -11,9 +11,8 @@ import io
 from gslides_automator.l1_generate import (
     find_existing_file,
     delete_file,
-    retry_with_exponential_backoff,
 )
-from googleapiclient.discovery import build
+from gslides_automator.gdrive_api import GDriveAPI
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
@@ -39,14 +38,14 @@ def export_slide_to_pdf(
     Returns:
         bool: True if successful, False otherwise
     """
-    drive_service = build("drive", "v3", credentials=creds)
+    drive_api = GDriveAPI.get_instance(creds)
 
     print(f"  Exporting slide to PDF for {entity_name}...")
 
-    def _export_pdf():
+    try:
         # Export the presentation as PDF
-        request = drive_service.files().export(
-            fileId=slide_id, mimeType="application/pdf"
+        request = drive_api.export_file(
+            slide_id, mime_type="application/pdf"
         )
 
         pdf_content = io.BytesIO()
@@ -60,10 +59,10 @@ def export_slide_to_pdf(
 
         # Check if PDF file already exists and delete it
         pdf_filename = f"{entity_name}.pdf"
-        existing_pdf_id = find_existing_file(drive_service, pdf_filename, l3_folder_id)
+        existing_pdf_id = find_existing_file(drive_api, pdf_filename, l3_folder_id)
         if existing_pdf_id:
             print("    Found existing PDF, deleting...")
-            if not delete_file(drive_service, existing_pdf_id):
+            if not delete_file(drive_api, existing_pdf_id):
                 print("    ✗ Failed to delete existing PDF")
                 return False
 
@@ -74,21 +73,14 @@ def export_slide_to_pdf(
 
         file_metadata = {"name": pdf_filename, "parents": [l3_folder_id]}
 
-        uploaded_file = (
-            drive_service.files()
-            .create(
-                body=file_metadata,
-                media_body=media,
-                fields="id, name",
-                supportsAllDrives=True,
-            )
-            .execute()
+        uploaded_file = drive_api.create_file(
+            body=file_metadata,
+            media_body=media,
+            fields="id, name",
+            supportsAllDrives=True,
         )
 
-        return uploaded_file.get("id") is not None
-
-    try:
-        pdf_id = retry_with_exponential_backoff(_export_pdf)
+        pdf_id = uploaded_file.get("id")
         if pdf_id:
             print(f"    ✓ PDF exported successfully: {entity_name}.pdf")
             return True

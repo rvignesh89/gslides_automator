@@ -7,9 +7,9 @@ import re
 import time
 from typing import Dict, Iterable, List, Optional, Sequence, Set
 
-from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload
+from gslides_automator.gdrive_api import GDriveAPI
 
 
 @dataclass
@@ -149,7 +149,7 @@ def execute_with_retry(request):
 
 
 def _find_child_by_name(
-    drive_service,
+    drive_api,
     parent_id: str,
     names: str | Sequence[str],
     mime_type: str | None = None,
@@ -164,14 +164,12 @@ def _find_child_by_name(
         query = (
             f"'{parent_id}' in parents and name='{name}' and trashed=false{mime_clause}"
         )
-        result = execute_with_retry(
-            drive_service.files().list(
-                q=query,
-                fields="files(id,name,mimeType)",
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-                pageSize=5,
-            )
+        result = drive_api.list_files(
+            query=query,
+            fields="files(id,name,mimeType)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+            pageSize=5,
         )
         files = result.get("files", [])
         if files:
@@ -183,7 +181,7 @@ def _find_child_by_name(
 
 
 def _find_or_create_folder(
-    drive_service,
+    drive_api,
     parent_id: str,
     folder_name: str,
 ) -> str:
@@ -192,7 +190,7 @@ def _find_or_create_folder(
     """
     try:
         return _find_child_by_name(
-            drive_service,
+            drive_api,
             parent_id,
             folder_name,
             mime_type="application/vnd.google-apps.folder",
@@ -204,12 +202,10 @@ def _find_or_create_folder(
             "mimeType": "application/vnd.google-apps.folder",
             "parents": [parent_id],
         }
-        folder = execute_with_retry(
-            drive_service.files().create(
-                body=file_metadata,
-                fields="id",
-                supportsAllDrives=True,
-            )
+        folder = drive_api.create_file(
+            body=file_metadata,
+            fields="id",
+            supportsAllDrives=True,
         )
         return folder.get("id")
 
@@ -230,31 +226,31 @@ def resolve_layout(shared_drive_url: str, creds) -> DriveLayout:
     - L3-PDF
     - Templates
     """
-    drive_service = build("drive", "v3", credentials=creds)
+    drive_api = GDriveAPI.get_instance(creds)
     root_id = _extract_id_from_url(shared_drive_url)
 
     # Optional folders - create if missing
-    l0_id = _find_or_create_folder(drive_service, root_id, "L0-Raw")
-    l1_id = _find_or_create_folder(drive_service, root_id, "L1-Merged")
-    l2_id = _find_or_create_folder(drive_service, root_id, "L2-Slide")
-    l3_id = _find_or_create_folder(drive_service, root_id, "L3-PDF")
-    templates_id = _find_or_create_folder(drive_service, root_id, "Templates")
+    l0_id = _find_or_create_folder(drive_api, root_id, "L0-Raw")
+    l1_id = _find_or_create_folder(drive_api, root_id, "L1-Merged")
+    l2_id = _find_or_create_folder(drive_api, root_id, "L2-Slide")
+    l3_id = _find_or_create_folder(drive_api, root_id, "L3-PDF")
+    templates_id = _find_or_create_folder(drive_api, root_id, "Templates")
 
     # Required files - raise error if missing
     data_template_id = _find_child_by_name(
-        drive_service,
+        drive_api,
         templates_id,
         names=("data-template.gsheet", "data-template"),
         mime_type="application/vnd.google-apps.spreadsheet",
     )
     report_template_id = _find_child_by_name(
-        drive_service,
+        drive_api,
         templates_id,
         names=("report-template.gslide", "report-template"),
         mime_type="application/vnd.google-apps.presentation",
     )
     entities_csv_id = _find_child_by_name(
-        drive_service,
+        drive_api,
         root_id,
         names=("entities.csv", "entities"),
         mime_type="text/csv",
@@ -279,9 +275,9 @@ def load_entities(entities_csv_id: str, creds) -> List[str]:
     (second column) is exactly `Y`. Works with both old format (Entity, Generate, Slides)
     and new format (Entity, L1, L2, L3).
     """
-    drive_service = build("drive", "v3", credentials=creds)
-    request = drive_service.files().get_media(
-        fileId=entities_csv_id, supportsAllDrives=True
+    drive_api = GDriveAPI.get_instance(creds)
+    request = drive_api.get_media(
+        entities_csv_id, supportsAllDrives=True
     )
 
     def _download():
@@ -382,9 +378,9 @@ def load_entities_with_slides(
     A value of None means all slides.
     Works with both old format (Entity, Generate, Slides) and new format (Entity, L1, L2, L3).
     """
-    drive_service = build("drive", "v3", credentials=creds)
-    request = drive_service.files().get_media(
-        fileId=entities_csv_id, supportsAllDrives=True
+    drive_api = GDriveAPI.get_instance(creds)
+    request = drive_api.get_media(
+        entities_csv_id, supportsAllDrives=True
     )
 
     def _download():
@@ -455,9 +451,9 @@ def load_entities_with_flags(entities_csv_id: str, creds) -> List[EntityFlags]:
     Returns:
         List of EntityFlags objects
     """
-    drive_service = build("drive", "v3", credentials=creds)
-    request = drive_service.files().get_media(
-        fileId=entities_csv_id, supportsAllDrives=True
+    drive_api = GDriveAPI.get_instance(creds)
+    request = drive_api.get_media(
+        entities_csv_id, supportsAllDrives=True
     )
 
     def _download():

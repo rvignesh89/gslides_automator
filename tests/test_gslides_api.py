@@ -12,7 +12,8 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from googleapiclient.errors import HttpError
 
-from gslides_automator.gslides_api import GSlidesAPI, TokenBucket
+from gslides_automator.gslides_api import GSlidesAPI
+from gslides_automator.token_bucket import TokenBucket
 
 
 class TestTokenBucket:

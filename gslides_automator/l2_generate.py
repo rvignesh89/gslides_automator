@@ -13,9 +13,10 @@ import sys
 import re
 import time
 from typing import Optional, Set
-from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from gslides_automator.gslides_api import GSlidesAPI
+from gslides_automator.gdrive_api import GDriveAPI
+from gslides_automator.gsheets_api import GSheetsAPI
 
 _TABLE_SLIDE_PROCEED_DECISION: Optional[bool] = (
     None  # Session-level choice for table slide regeneration
@@ -24,64 +25,6 @@ _TABLE_SLIDE_PROCEED_DECISION: Optional[bool] = (
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
-
-
-def retry_with_exponential_backoff(
-    func, max_retries=5, initial_delay=1, max_delay=60, backoff_factor=2
-):
-    """
-    Retry a function with exponential backoff on 429 (Too Many Requests) and 5xx (Server) errors.
-
-    Args:
-        func: Function to retry (should be a callable that takes no arguments)
-        max_retries: Maximum number of retry attempts (default: 5)
-        initial_delay: Initial delay in seconds before first retry (default: 1)
-        max_delay: Maximum delay in seconds between retries (default: 60)
-        backoff_factor: Factor to multiply delay by after each retry (default: 2)
-
-    Returns:
-        The return value of func() if successful
-
-    Raises:
-        HttpError: If the error is not retryable or if max_retries is exceeded
-        Exception: Any other exception raised by func()
-    """
-    delay = initial_delay
-
-    for attempt in range(max_retries + 1):
-        try:
-            return func()
-        except HttpError as error:
-            status = error.resp.status
-            # Check if it's a retryable error (429 Too Many Requests or 5xx Server Errors)
-            is_retryable = (status == 429) or (500 <= status < 600)
-
-            if is_retryable:
-                if attempt < max_retries:
-                    # Calculate wait time with exponential backoff
-                    wait_time = min(delay, max_delay)
-                    if status == 429:
-                        error_msg = "Rate limit exceeded (429)"
-                    else:
-                        error_msg = f"Server error ({status})"
-                    print(
-                        f"  ⚠️  {error_msg}. Retrying in {wait_time:.1f} seconds... (attempt {attempt + 1}/{max_retries})"
-                    )
-                    time.sleep(wait_time)
-                    delay *= backoff_factor
-                else:
-                    if status == 429:
-                        error_msg = "Rate limit exceeded (429)"
-                    else:
-                        error_msg = f"Server error ({status})"
-                    print(f"  ✗ {error_msg}. Max retries ({max_retries}) reached.")
-                    raise
-            else:
-                # For non-retryable errors, re-raise immediately
-                raise
-        except Exception:
-            # For non-HttpError exceptions, re-raise immediately
-            raise
 
 
 def list_entity_folders(parent_folder_id, creds):
@@ -95,23 +38,19 @@ def list_entity_folders(parent_folder_id, creds):
     Returns:
         list: List of tuples (folder_id, folder_name)
     """
-    drive_service = build("drive", "v3", credentials=creds)
+    drive_api = GDriveAPI.get_instance(creds)
     folders = []
 
     try:
         # Query for folders in the parent folder
         query = f"mimeType='application/vnd.google-apps.folder' and '{parent_folder_id}' in parents and trashed=false"
 
-        results = (
-            drive_service.files()
-            .list(
-                q=query,
-                fields="files(id, name)",
-                pageSize=1000,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            )
-            .execute()
+        results = drive_api.list_files(
+            query=query,
+            fields="files(id, name)",
+            pageSize=1000,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
         )
 
         items = results.get("files", [])
@@ -137,23 +76,19 @@ def list_spreadsheets_in_folder(folder_id, creds):
     Returns:
         list: List of tuples (spreadsheet_id, spreadsheet_name)
     """
-    drive_service = build("drive", "v3", credentials=creds)
+    drive_api = GDriveAPI.get_instance(creds)
     spreadsheets = []
 
     try:
         # Query for Google Sheets files in the folder
         query = f"mimeType='application/vnd.google-apps.spreadsheet' and '{folder_id}' in parents and trashed=false"
 
-        results = (
-            drive_service.files()
-            .list(
-                q=query,
-                fields="files(id, name)",
-                pageSize=1000,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            )
-            .execute()
+        results = drive_api.list_files(
+            query=query,
+            fields="files(id, name)",
+            pageSize=1000,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
         )
 
         items = results.get("files", [])
@@ -333,27 +268,20 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
     Returns:
         bool: True if a presentation was found and deleted, False otherwise
     """
-    drive_service = build("drive", "v3", credentials=creds)
+    drive_api = GDriveAPI.get_instance(creds)
 
     try:
         # Search for existing presentation with the expected name
         expected_filename = f"{entity_name}.gslides"
         query = f"'{output_folder_id}' in parents and name='{expected_filename}' and mimeType='application/vnd.google-apps.presentation' and trashed=false"
 
-        def list_files():
-            return (
-                drive_service.files()
-                .list(
-                    q=query,
-                    fields="files(id, name)",
-                    pageSize=10,
-                    supportsAllDrives=True,
-                    includeItemsFromAllDrives=True,
-                )
-                .execute()
-            )
-
-        results = retry_with_exponential_backoff(list_files)
+        results = drive_api.list_files(
+            query=query,
+            fields="files(id, name)",
+            pageSize=10,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        )
 
         files = results.get("files", [])
         if files:
@@ -361,19 +289,11 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
             for file in files:
                 # First check if file is accessible
                 try:
-
-                    def _check_file_access():
-                        return (
-                            drive_service.files()
-                            .get(
-                                fileId=file["id"],
-                                fields="id, name",
-                                supportsAllDrives=True,
-                            )
-                            .execute()
-                        )
-
-                    retry_with_exponential_backoff(_check_file_access)
+                    drive_api.get_file(
+                        file["id"],
+                        fields="id, name",
+                        supportsAllDrives=True,
+                    )
                 except HttpError as check_error:
                     if check_error.resp.status == 404:
                         try:
@@ -399,15 +319,8 @@ def delete_existing_presentation(entity_name, output_folder_id, creds):
                         print(f"  ⚠️  Error checking presentation access: {check_error}")
                         continue
 
-                def delete_file():
-                    return (
-                        drive_service.files()
-                        .delete(fileId=file["id"], supportsAllDrives=True)
-                        .execute()
-                    )
-
                 try:
-                    retry_with_exponential_backoff(delete_file)
+                    drive_api.delete_file(file["id"], supportsAllDrives=True)
                     print(
                         f"  ✓ Deleted existing presentation: {file['name']} (ID: {file['id']})"
                     )
@@ -477,27 +390,20 @@ def find_existing_presentation(entity_name, output_folder_id, creds):
     Returns:
         str: Presentation ID if found, None otherwise
     """
-    drive_service = build("drive", "v3", credentials=creds)
+    drive_api = GDriveAPI.get_instance(creds)
 
     try:
         # Search for existing presentation with the expected name
         expected_filename = f"{entity_name}.gslides"
         query = f"'{output_folder_id}' in parents and name='{expected_filename}' and mimeType='application/vnd.google-apps.presentation' and trashed=false"
 
-        def list_files():
-            return (
-                drive_service.files()
-                .list(
-                    q=query,
-                    fields="files(id, name)",
-                    pageSize=10,
-                    supportsAllDrives=True,
-                    includeItemsFromAllDrives=True,
-                )
-                .execute()
-            )
-
-        results = retry_with_exponential_backoff(list_files)
+        results = drive_api.list_files(
+            query=query,
+            fields="files(id, name)",
+            pageSize=10,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        )
 
         files = results.get("files", [])
         if files:
@@ -505,15 +411,7 @@ def find_existing_presentation(entity_name, output_folder_id, creds):
             file_id = files[0]["id"]
             # Verify file is accessible
             try:
-
-                def _verify_file_access():
-                    return (
-                        drive_service.files()
-                        .get(fileId=file_id, fields="id, name", supportsAllDrives=True)
-                        .execute()
-                    )
-
-                retry_with_exponential_backoff(_verify_file_access)
+                drive_api.get_file(file_id, fields="id, name", supportsAllDrives=True)
                 return file_id
             except HttpError as check_error:
                 if check_error.resp.status == 404:
@@ -1615,23 +1513,16 @@ def copy_template_presentation(spreadsheet_name, template_id, output_folder_id, 
     Returns:
         str: ID of the copied presentation
     """
-    drive_service = build("drive", "v3", credentials=creds)
+    drive_api = GDriveAPI.get_instance(creds)
 
     # Copy the template
     print("Copying template presentation...")
 
-    def _copy_file():
-        return (
-            drive_service.files()
-            .copy(
-                fileId=template_id,
-                body={"name": f"{spreadsheet_name}.gslides"},
-                supportsAllDrives=True,
-            )
-            .execute()
-        )
-
-    copied_file = retry_with_exponential_backoff(_copy_file)
+    copied_file = drive_api.copy_file(
+        template_id,
+        body={"name": f"{spreadsheet_name}.gslides"},
+        supportsAllDrives=True,
+    )
 
     new_presentation_id = copied_file.get("id")
     print(
@@ -1641,46 +1532,27 @@ def copy_template_presentation(spreadsheet_name, template_id, output_folder_id, 
     # Move to output folder
     print("Moving presentation to output folder...")
 
-    def _get_file_metadata():
-        return (
-            drive_service.files()
-            .get(fileId=new_presentation_id, fields="parents", supportsAllDrives=True)
-            .execute()
-        )
-
-    file_metadata = retry_with_exponential_backoff(_get_file_metadata)
+    file_metadata = drive_api.get_file(
+        new_presentation_id, fields="parents", supportsAllDrives=True
+    )
     previous_parents = ",".join(file_metadata.get("parents", []))
 
-    def _update_file_with_parents():
-        return (
-            drive_service.files()
-            .update(
-                fileId=new_presentation_id,
-                addParents=output_folder_id,
-                removeParents=previous_parents,
-                fields="id, parents",
-                supportsAllDrives=True,
-            )
-            .execute()
-        )
-
-    def _update_file_add_only():
-        return (
-            drive_service.files()
-            .update(
-                fileId=new_presentation_id,
-                addParents=output_folder_id,
-                fields="id, parents",
-                supportsAllDrives=True,
-            )
-            .execute()
-        )
-
     if previous_parents:
-        retry_with_exponential_backoff(_update_file_with_parents)
+        drive_api.update_file(
+            new_presentation_id,
+            addParents=output_folder_id,
+            removeParents=previous_parents,
+            fields="id, parents",
+            supportsAllDrives=True,
+        )
     else:
         # If no previous parents, just add to the folder
-        retry_with_exponential_backoff(_update_file_add_only)
+        drive_api.update_file(
+            new_presentation_id,
+            addParents=output_folder_id,
+            fields="id, parents",
+            supportsAllDrives=True,
+        )
 
     return new_presentation_id
 
@@ -1697,18 +1569,11 @@ def get_chart_id_from_sheet(spreadsheet_id, sheet_name, creds):
     Returns:
         int: Chart ID, or None if not found
     """
-    sheets_service = build("sheets", "v4", credentials=creds)
+    sheets_api = GSheetsAPI.get_instance(creds)
 
     try:
         # Get the spreadsheet to find charts
-        def _get_spreadsheet():
-            return (
-                sheets_service.spreadsheets()
-                .get(spreadsheetId=spreadsheet_id)
-                .execute()
-            )
-
-        spreadsheet = retry_with_exponential_backoff(_get_spreadsheet)
+        spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
 
         # Find the sheet and get its charts
         for sheet in spreadsheet.get("sheets", []):
@@ -1740,7 +1605,7 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
     Returns:
         str: Image file ID that can be used to get public URL, or None if not found
     """
-    drive_service = build("drive", "v3", credentials=creds)
+    drive_api = GDriveAPI.get_instance(creds)
 
     try:
         # Construct expected filename: picture-<picture_name>
@@ -1769,21 +1634,13 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
             query = f"'{entity_folder_id}' in parents and name='{image_filename}' and trashed=false and ({mime_query})"
 
             try:
-
-                def _list_files():
-                    return (
-                        drive_service.files()
-                        .list(
-                            q=query,
-                            fields="files(id, name, mimeType)",
-                            pageSize=10,
-                            supportsAllDrives=True,
-                            includeItemsFromAllDrives=True,
-                        )
-                        .execute()
-                    )
-
-                results = retry_with_exponential_backoff(_list_files)
+                results = drive_api.list_files(
+                    query=query,
+                    fields="files(id, name, mimeType)",
+                    pageSize=10,
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                )
 
                 files = results.get("files", [])
                 if files:
@@ -1798,21 +1655,13 @@ def get_image_file_from_folder(entity_folder_id, picture_name, creds):
         query = f"'{entity_folder_id}' in parents and name contains '{expected_filename_base}' and trashed=false and ({mime_query})"
 
         try:
-
-            def _list_files_flexible():
-                return (
-                    drive_service.files()
-                    .list(
-                        q=query,
-                        fields="files(id, name, mimeType)",
-                        pageSize=10,
-                        supportsAllDrives=True,
-                        includeItemsFromAllDrives=True,
-                    )
-                    .execute()
-                )
-
-            results = retry_with_exponential_backoff(_list_files_flexible)
+            results = drive_api.list_files(
+                query=query,
+                fields="files(id, name, mimeType)",
+                pageSize=10,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
 
             files = results.get("files", [])
             if files:
@@ -1861,7 +1710,7 @@ def replace_textbox_with_chart(
         bool: True if successful, False otherwise
     """
     slides_service = GSlidesAPI.get_instance(creds)
-    sheets_service = build("sheets", "v4", credentials=creds)
+    sheets_api = GSheetsAPI.get_instance(creds)
 
     # Get the slide to find the z-order index of the textbox
     presentation = slides_service.get_presentation(presentation_id)
@@ -1938,10 +1787,7 @@ def replace_textbox_with_chart(
     actual_height = base_height * scale_y
 
     # Get the sheet ID for the chart
-    def _get_spreadsheet_for_chart():
-        return sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-
-    spreadsheet = retry_with_exponential_backoff(_get_spreadsheet_for_chart)
+    spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
     sheet_id = None
 
     for sheet in spreadsheet.get("sheets", []):
@@ -2090,7 +1936,7 @@ def replace_textbox_with_image(
         bool: True if successful, False otherwise
     """
     slides_service = GSlidesAPI.get_instance(creds)
-    drive_service = build("drive", "v3", credentials=creds)
+    drive_api = GDriveAPI.get_instance(creds)
 
     # Get the slide to find the z-order index of the textbox
     presentation = slides_service.get_presentation(presentation_id)
@@ -2183,14 +2029,10 @@ def replace_textbox_with_image(
         try:
             # First, check if file already has public access
             try:
-                permissions = (
-                    drive_service.permissions()
-                    .list(
-                        fileId=file_id,
-                        fields="permissions(id,type,role)",
-                        supportsAllDrives=True,
-                    )
-                    .execute()
+                permissions = drive_api.list_permissions(
+                    file_id,
+                    fields="permissions(id,type,role)",
+                    supportsAllDrives=True,
                 )
 
                 # Check if 'anyone' permission already exists
@@ -2211,17 +2053,9 @@ def replace_textbox_with_image(
             if not has_public_access:
                 try:
                     permission = {"type": "anyone", "role": "reader"}
-
-                    def _create_permission():
-                        return (
-                            drive_service.permissions()
-                            .create(
-                                fileId=file_id, body=permission, supportsAllDrives=True
-                            )
-                            .execute()
-                        )
-
-                    result = retry_with_exponential_backoff(_create_permission)
+                    result = drive_api.create_permission(
+                        file_id, body=permission, supportsAllDrives=True
+                    )
                     permission_id = result.get("id")
                     had_public_permission = True
                     print(
@@ -2234,20 +2068,10 @@ def replace_textbox_with_image(
                     )
                     # Try to get webContentLink - this might work if file is already shared
                     try:
-
-                        def _get_file_metadata():
-                            return (
-                                drive_service.files()
-                                .get(
-                                    fileId=file_id,
-                                    fields="webContentLink,webViewLink",
-                                    supportsAllDrives=True,
-                                )
-                                .execute()
-                            )
-
-                        file_metadata = retry_with_exponential_backoff(
-                            _get_file_metadata
+                        file_metadata = drive_api.get_file(
+                            file_id,
+                            fields="webContentLink,webViewLink",
+                            supportsAllDrives=True,
                         )
 
                         web_content_link = file_metadata.get("webContentLink")
@@ -2268,16 +2092,9 @@ def replace_textbox_with_image(
                         )
 
             # Get the public URL for the image
-            def _get_file_metadata_public():
-                return (
-                    drive_service.files()
-                    .get(
-                        fileId=file_id, fields="webContentLink", supportsAllDrives=True
-                    )
-                    .execute()
-                )
-
-            file_metadata = retry_with_exponential_backoff(_get_file_metadata_public)
+            file_metadata = drive_api.get_file(
+                file_id, fields="webContentLink", supportsAllDrives=True
+            )
 
             web_content_link = file_metadata.get("webContentLink")
             if web_content_link:
@@ -2408,19 +2225,11 @@ def replace_textbox_with_image(
         # Always revoke the temporary public permission, whether insertion succeeded or failed
         if had_public_permission and permission_id and not is_url:
             try:
-
-                def _revoke_permission():
-                    return (
-                        drive_service.permissions()
-                        .delete(
-                            fileId=image_url_or_file_id,
-                            permissionId=permission_id,
-                            supportsAllDrives=True,
-                        )
-                        .execute()
-                    )
-
-                retry_with_exponential_backoff(_revoke_permission)
+                drive_api.delete_permission(
+                    image_url_or_file_id,
+                    permission_id,
+                    supportsAllDrives=True,
+                )
                 print("    ℹ️  Revoked temporary public access from image file")
             except HttpError as revoke_error:
                 print(
@@ -3058,7 +2867,7 @@ def process_all_slides(
 
             # Report slide processing time
             slide_elapsed = time.time() - slide_start_time
-            print(f"Slide {slide_number} processing time: {slide_elapsed:.2f} seconds")
+            print(f"  Slide {slide_number} processing time: {slide_elapsed:.2f} seconds")
 
         return True
 
