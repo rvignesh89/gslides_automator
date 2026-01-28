@@ -134,6 +134,7 @@ def retry_with_exponential_backoff(
                 # For non-retryable errors, re-raise immediately
                 raise
 
+
 def _find_child_by_name(
     drive_api,
     parent_id: str,
@@ -262,9 +263,7 @@ def load_entities(entities_csv_id: str, creds) -> List[str]:
     and new format (Entity, L1, L2, L3).
     """
     drive_api = GDriveAPI.get_shared_drive_service(creds)
-    request = drive_api.get_media(
-        entities_csv_id, supportsAllDrives=True
-    )
+    request = drive_api.get_media(entities_csv_id, supportsAllDrives=True)
 
     def _download():
         buffer = io.BytesIO()
@@ -365,9 +364,7 @@ def load_entities_with_slides(
     Works with both old format (Entity, Generate, Slides) and new format (Entity, L1, L2, L3).
     """
     drive_api = GDriveAPI.get_shared_drive_service(creds)
-    request = drive_api.get_media(
-        entities_csv_id, supportsAllDrives=True
-    )
+    request = drive_api.get_media(entities_csv_id, supportsAllDrives=True)
 
     def _download():
         buffer = io.BytesIO()
@@ -438,9 +435,7 @@ def load_entities_with_flags(entities_csv_id: str, creds) -> List[EntityFlags]:
         List of EntityFlags objects
     """
     drive_api = GDriveAPI.get_shared_drive_service(creds)
-    request = drive_api.get_media(
-        entities_csv_id, supportsAllDrives=True
-    )
+    request = drive_api.get_media(entities_csv_id, supportsAllDrives=True)
 
     def _download():
         buffer = io.BytesIO()

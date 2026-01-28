@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 _service: Optional[GSlidesAPI] = None
 _service_lock = threading.Lock()
 
+
 class GSlidesAPI:
     """
     Service that wraps Google Slides API with rate limiting and retry logic.
@@ -66,7 +67,6 @@ class GSlidesAPI:
                     _service = GSlidesAPI(creds)
         return _service
 
-
     def reset_service():
         """
         Reset the shared service instance (useful for testing).
@@ -77,7 +77,6 @@ class GSlidesAPI:
         global _service
         with _service_lock:
             _service = None
-
 
     def get_presentation(self, presentation_id: str):
         """
@@ -94,7 +93,11 @@ class GSlidesAPI:
 
         # Execute with retry logic
         def _get():
-            return self.service.presentations().get(presentationId=presentation_id).execute()
+            return (
+                self.service.presentations()
+                .get(presentationId=presentation_id)
+                .execute()
+            )
 
         return retry_with_exponential_backoff(_get)
 
@@ -114,9 +117,10 @@ class GSlidesAPI:
 
         # Execute with retry logic
         def _batch_update():
-            return self.service.presentations().batchUpdate(
-                presentationId=presentation_id,
-                body=body
-            ).execute()
+            return (
+                self.service.presentations()
+                .batchUpdate(presentationId=presentation_id, body=body)
+                .execute()
+            )
 
         return retry_with_exponential_backoff(_batch_update)

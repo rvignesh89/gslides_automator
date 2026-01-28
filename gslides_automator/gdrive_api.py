@@ -69,7 +69,6 @@ class GDriveAPI:
                     _service = GDriveAPI(creds)
         return _service
 
-
     def reset_service():
         """
         Reset the shared service instance (useful for testing).
@@ -80,7 +79,6 @@ class GDriveAPI:
         global _service
         with _service_lock:
             _service = None
-
 
     def list_files(self, query: str = None, **kwargs):
         """

@@ -44,9 +44,7 @@ def export_slide_to_pdf(
 
     try:
         # Export the presentation as PDF
-        request = drive_api.export_file(
-            slide_id, mime_type="application/pdf"
-        )
+        request = drive_api.export_file(slide_id, mime_type="application/pdf")
 
         pdf_content = io.BytesIO()
         downloader = MediaIoBaseDownload(pdf_content, request)

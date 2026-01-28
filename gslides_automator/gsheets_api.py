@@ -68,15 +68,15 @@ class GSheetsAPI:
         return _service
 
     def reset_service():
-            """
-            Reset the shared service instance (useful for testing).
+        """
+        Reset the shared service instance (useful for testing).
 
-            This function is thread-safe and should be used in test fixtures
-            to ensure test isolation when needed.
-            """
-            global _service
-            with _service_lock:
-                _service = None
+        This function is thread-safe and should be used in test fixtures
+        to ensure test isolation when needed.
+        """
+        global _service
+        with _service_lock:
+            _service = None
 
     def get_spreadsheet(self, spreadsheet_id: str, **kwargs):
         """
@@ -187,7 +187,10 @@ class GSheetsAPI:
 
         # Execute with retry logic
         def _batch_update():
-            body = {"valueInputOption": kwargs.pop("valueInputOption", "RAW"), "data": data}
+            body = {
+                "valueInputOption": kwargs.pop("valueInputOption", "RAW"),
+                "data": data,
+            }
             return (
                 self.service.spreadsheets()
                 .values()

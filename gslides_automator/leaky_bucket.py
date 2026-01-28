@@ -48,7 +48,9 @@ class LeakyBucket:
             write_capacity: Ignored (kept for API compatibility)
         """
         self.read_rate = read_rate  # operations per minute
-        self.write_rate = write_rate  # operations per minute, None for single-bucket mode
+        self.write_rate = (
+            write_rate  # operations per minute, None for single-bucket mode
+        )
         self.single_bucket_mode = write_rate is None
 
         # Calculate minimum interval between calls (in seconds)
@@ -116,7 +118,6 @@ class LeakyBucket:
             # Calculate time elapsed since last call
             elapsed = now - last_call
 
-
             # If not enough time has passed, wait
             if elapsed < interval:
                 wait_time = interval - elapsed
@@ -148,4 +149,3 @@ class LeakyBucket:
                 self.last_read_call = now
             else:
                 self.last_write_call = now
-

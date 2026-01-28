@@ -25,7 +25,9 @@ class TestGDriveAPI:
         mock_service = MagicMock()
         mock_files = MagicMock()
         mock_list = MagicMock()
-        mock_execute = MagicMock(return_value={"files": [{"id": "file1", "name": "test.txt"}]})
+        mock_execute = MagicMock(
+            return_value={"files": [{"id": "file1", "name": "test.txt"}]}
+        )
 
         mock_build.return_value = mock_service
         mock_service.files.return_value = mock_files
@@ -182,7 +184,9 @@ class TestGDriveAPI:
 
         # Verify it returns the request object (not executed)
         assert result is mock_export
-        mock_files.export.assert_called_once_with(fileId="file1", mimeType="application/pdf")
+        mock_files.export.assert_called_once_with(
+            fileId="file1", mimeType="application/pdf"
+        )
 
     @patch("gslides_automator.gdrive_api.build")
     def test_copy_file(self, mock_build):
@@ -216,7 +220,9 @@ class TestGDriveAPI:
         mock_service = MagicMock()
         mock_permissions = MagicMock()
         mock_list = MagicMock()
-        mock_execute = MagicMock(return_value={"permissions": [{"id": "perm1", "type": "user"}]})
+        mock_execute = MagicMock(
+            return_value={"permissions": [{"id": "perm1", "type": "user"}]}
+        )
 
         mock_build.return_value = mock_service
         mock_service.permissions.return_value = mock_permissions
@@ -407,8 +413,14 @@ class TestGDriveAPI:
             api.get_file("file1")
 
         # Check that debug logs were emitted for the second call
-        assert any("Rate limit - waiting" in record.message and "operation" in record.message for record in caplog.records)
-        assert any("Rate limit - operation allowed" in record.message for record in caplog.records)
+        assert any(
+            "Rate limit - waiting" in record.message and "operation" in record.message
+            for record in caplog.records
+        )
+        assert any(
+            "Rate limit - operation allowed" in record.message
+            for record in caplog.records
+        )
 
     @patch("gslides_automator.gdrive_api.build")
     def test_no_logging_when_no_rate_limit(self, mock_build, caplog):
@@ -433,7 +445,6 @@ class TestGDriveAPI:
 
         # Check that no rate limit logs were emitted (tokens available immediately)
         rate_limit_logs = [
-            record for record in caplog.records
-            if "Rate limit" in record.message
+            record for record in caplog.records if "Rate limit" in record.message
         ]
         assert len(rate_limit_logs) == 0

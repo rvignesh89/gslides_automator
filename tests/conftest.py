@@ -20,6 +20,7 @@ from tests.test_utils import (
     execute_with_retry,
 )
 
+
 @pytest.fixture(scope="session")
 def test_credentials(tmp_path_factory):
     """

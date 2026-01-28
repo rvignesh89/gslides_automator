@@ -64,9 +64,7 @@ def retry_with_exponential_backoff(
                         error_msg = "Rate limit exceeded (429)"
                     else:
                         error_msg = f"Server error ({status})"
-                    print(
-                        f"  ✗ {error_msg}. Max retries ({max_retries}) reached."
-                    )
+                    print(f"  ✗ {error_msg}. Max retries ({max_retries}) reached.")
                     raise
             else:
                 # For non-retryable errors, re-raise immediately

@@ -264,7 +264,10 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
                             "addSheet": {
                                 "properties": {
                                     "title": sheet_name,
-                                    "gridProperties": {"rowCount": rows, "columnCount": cols},
+                                    "gridProperties": {
+                                        "rowCount": rows,
+                                        "columnCount": cols,
+                                    },
                                 }
                             }
                         }
@@ -294,9 +297,7 @@ def create_test_data_template(templates_folder_id: str, creds) -> str:
     ensure_sheet_exists("data", rows=10, cols=2)
 
     # Add sample placeholder data
-    sheets_api.update_values(
-        spreadsheet_id, "data!A1:B1", [["placeholder", "value"]]
-    )
+    sheets_api.update_values(spreadsheet_id, "data!A1:B1", [["placeholder", "value"]])
     sheets_api.update_values(
         spreadsheet_id,
         "data!A2:B5",
@@ -412,7 +413,7 @@ def create_test_slide_template(templates_folder_id: str, creds) -> str:
                         }
                     }
                 ]
-            }
+            },
         )
         slide_id = create_result["replies"][0]["createSlide"]["objectId"]
     else:
@@ -491,10 +492,7 @@ def create_test_slide_template(templates_folder_id: str, creds) -> str:
 
     # Execute batch update
     if requests:
-        slides_service.batch_update(
-            presentation_id,
-            {"requests": requests}
-        )
+        slides_service.batch_update(presentation_id, {"requests": requests})
 
     return presentation_id
 

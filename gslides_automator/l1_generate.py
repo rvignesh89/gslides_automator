@@ -21,6 +21,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
 
+
 def find_existing_file(drive_api, file_name, folder_id):
     """
     Check if a file with the given name exists in the specified folder.
@@ -264,7 +265,11 @@ def list_csv_files_in_folder(drive_api, folder_id):
             includeItemsFromAllDrives=True,
         )
         files = results.get("files", [])
-        return [(f["id"], f["name"]) for f in files if isinstance(f, dict) and "id" in f and "name" in f]
+        return [
+            (f["id"], f["name"])
+            for f in files
+            if isinstance(f, dict) and "id" in f and "name" in f
+        ]
     except HttpError as error:
         print(f"Error listing CSV files in folder: {error}")
         return []
@@ -398,7 +403,9 @@ def write_csv_to_sheet_tab(sheets_api, spreadsheet_id, tab_name, csv_data, creds
     try:
         spreadsheet = sheets_api.get_spreadsheet(spreadsheet_id)
         sheets = spreadsheet.get("sheets", [])
-        sheet_titles = [sheet.get("properties", {}).get("title", "") for sheet in sheets]
+        sheet_titles = [
+            sheet.get("properties", {}).get("title", "") for sheet in sheets
+        ]
         if tab_name not in sheet_titles:
             print(f"    ⚠️  Tab '{tab_name}' not found in spreadsheet")
             return False
@@ -467,15 +474,17 @@ def list_image_files_in_folder(drive_api, folder_id):
             includeItemsFromAllDrives=True,
         )
         files = results.get("files", [])
-        return [(f["id"], f["name"]) for f in files if isinstance(f, dict) and "id" in f and "name" in f]
+        return [
+            (f["id"], f["name"])
+            for f in files
+            if isinstance(f, dict) and "id" in f and "name" in f
+        ]
     except HttpError as error:
         print(f"Error listing image files in folder: {error}")
         return []
 
 
-def copy_image_to_folder(
-    drive_api, source_file_id, destination_folder_id, file_name
-):
+def copy_image_to_folder(drive_api, source_file_id, destination_folder_id, file_name):
     """
     Copy image file from source to destination folder, deleting existing if present.
 
@@ -489,9 +498,7 @@ def copy_image_to_folder(
         str: ID of the copied file, or None if failed
     """
     # Check if file already exists
-    existing_file_id = find_existing_file(
-        drive_api, file_name, destination_folder_id
-    )
+    existing_file_id = find_existing_file(drive_api, file_name, destination_folder_id)
     if existing_file_id:
         print(f"    Found existing image '{file_name}', deleting...")
         if delete_file(drive_api, existing_file_id):
@@ -559,9 +566,7 @@ def process_entity(entity_name, creds, layout: DriveLayout):
     try:
         # 1. Find/create L1-Merged entity folder
         print(f"Finding/creating L1-Merged folder for {entity_name}...")
-        l1_folder_id = find_or_create_entity_folder(
-            drive_api, entity_name, l1_root_id
-        )
+        l1_folder_id = find_or_create_entity_folder(drive_api, entity_name, l1_root_id)
         if not l1_folder_id:
             print(f"  ✗ Failed to find/create L1-Merged folder for {entity_name}")
             return False
@@ -569,9 +574,7 @@ def process_entity(entity_name, creds, layout: DriveLayout):
 
         # 2. Find L0-Raw entity folder
         print(f"Finding L0-Raw folder for {entity_name}...")
-        l0_folder_id = find_or_create_entity_folder(
-            drive_api, entity_name, l0_root_id
-        )
+        l0_folder_id = find_or_create_entity_folder(drive_api, entity_name, l0_root_id)
         if not l0_folder_id:
             print(f"  ✗ Failed to find L0-Raw folder for {entity_name}")
             return False

@@ -554,10 +554,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                 delete_requests.append({"deleteObject": {"objectId": target_slide_id}})
 
         if delete_requests:
-            slides_service.batch_update(
-                presentation_id,
-                {"requests": delete_requests}
-            )
+            slides_service.batch_update(presentation_id, {"requests": delete_requests})
 
         # Now create new slides and copy elements from template
         for slide_number in sorted(slide_numbers):
@@ -587,7 +584,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                             }
                         }
                     ]
-                }
+                },
             )
 
             new_slide_id = create_result["replies"][0]["createSlide"]["objectId"]
@@ -622,8 +619,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                     # Delete placeholder elements if any were found
                     if placeholder_delete_requests:
                         slides_service.batch_update(
-                            presentation_id,
-                            {"requests": placeholder_delete_requests}
+                            presentation_id, {"requests": placeholder_delete_requests}
                         )
 
             # Copy page properties (background color, etc.) from template slide
@@ -702,7 +698,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                                         }
                                     }
                                 ]
-                            }
+                            },
                         )
                     except HttpError as e:
                         # If updating page properties fails, log warning but continue
@@ -1506,8 +1502,7 @@ def replace_slides_from_template(presentation_id, template_id, slide_numbers, cr
                     for i in range(0, len(copy_requests), batch_size):
                         batch = copy_requests[i : i + batch_size]
                         slides_service.batch_update(
-                            presentation_id,
-                            {"requests": batch}
+                            presentation_id, {"requests": batch}
                         )
 
         print(f"  ✓ Replaced {len(slide_numbers)} slide(s) from template")
@@ -1915,8 +1910,7 @@ def replace_textbox_with_chart(
 
                                 try:
                                     slides_service.batch_update(
-                                        presentation_id,
-                                        {"requests": order_requests}
+                                        presentation_id, {"requests": order_requests}
                                     )
                                 except HttpError as order_error:
                                     print(
@@ -2228,8 +2222,7 @@ def replace_textbox_with_image(
 
                                 try:
                                     slides_service.batch_update(
-                                        presentation_id,
-                                        {"requests": order_requests}
+                                        presentation_id, {"requests": order_requests}
                                     )
                                 except HttpError as order_error:
                                     print(
@@ -2485,8 +2478,7 @@ def populate_table_with_data(
                 }
 
                 slides_service.batch_update(
-                    presentation_id,
-                    {"requests": [insert_request]}
+                    presentation_id, {"requests": [insert_request]}
                 )
 
                 # Update for next batch: move insertion point and reduce remaining count
@@ -2635,10 +2627,8 @@ def populate_table_with_data(
     batch_size = 50
     try:
         for i in range(0, len(requests), batch_size):
-
             slides_service.batch_update(
-                presentation_id,
-                {"requests": requests[i : i + batch_size]}
+                presentation_id, {"requests": requests[i : i + batch_size]}
             )
         print(f"  ✓ Populated table on slide {slide_number}")
         return True
@@ -2888,7 +2878,9 @@ def process_all_slides(
 
             # Report slide processing time
             slide_elapsed = time.time() - slide_start_time
-            print(f"  Slide {slide_number} processing time: {slide_elapsed:.2f} seconds")
+            print(
+                f"  Slide {slide_number} processing time: {slide_elapsed:.2f} seconds"
+            )
 
         return True
 

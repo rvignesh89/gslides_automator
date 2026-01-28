@@ -128,7 +128,9 @@ class TestLeakyBucket:
     def test_invalid_operation_type(self):
         """Test that invalid operation type raises ValueError."""
         bucket = LeakyBucket(read_rate=600.0, write_rate=60.0)
-        with pytest.raises(ValueError, match="operation_type must be 'read' or 'write'"):
+        with pytest.raises(
+            ValueError, match="operation_type must be 'read' or 'write'"
+        ):
             bucket.acquire("invalid")
 
     def test_thread_safety(self):
@@ -165,7 +167,9 @@ class TestGSlidesAPI:
         mock_service = MagicMock()
         mock_presentations = MagicMock()
         mock_get = MagicMock()
-        mock_execute = MagicMock(return_value={"presentationId": "test-id", "slides": []})
+        mock_execute = MagicMock(
+            return_value={"presentationId": "test-id", "slides": []}
+        )
 
         mock_build.return_value = mock_service
         mock_service.presentations.return_value = mock_presentations
@@ -305,7 +309,9 @@ class TestGSlidesAPI:
         mock_service = MagicMock()
         mock_presentations = MagicMock()
         mock_get = MagicMock()
-        mock_execute = MagicMock(return_value={"presentationId": "test-id", "slides": []})
+        mock_execute = MagicMock(
+            return_value={"presentationId": "test-id", "slides": []}
+        )
 
         mock_build.return_value = mock_service
         mock_service.presentations.return_value = mock_presentations
@@ -339,7 +345,9 @@ class TestGSlidesAPI:
         mock_service = MagicMock()
         mock_presentations = MagicMock()
         mock_get = MagicMock()
-        mock_execute = MagicMock(return_value={"presentationId": "test-id", "slides": []})
+        mock_execute = MagicMock(
+            return_value={"presentationId": "test-id", "slides": []}
+        )
 
         mock_build.return_value = mock_service
         mock_service.presentations.return_value = mock_presentations
@@ -360,8 +368,14 @@ class TestGSlidesAPI:
             api.get_presentation("test-id")
 
         # Check that debug logs were emitted for the second call
-        assert any("Rate limit - waiting" in record.message and "read" in record.message for record in caplog.records)
-        assert any("Rate limit - read operation allowed" in record.message for record in caplog.records)
+        assert any(
+            "Rate limit - waiting" in record.message and "read" in record.message
+            for record in caplog.records
+        )
+        assert any(
+            "Rate limit - read operation allowed" in record.message
+            for record in caplog.records
+        )
 
     @patch("gslides_automator.gslides_api.build")
     def test_no_logging_when_no_rate_limit(self, mock_build, caplog):
@@ -370,7 +384,9 @@ class TestGSlidesAPI:
         mock_service = MagicMock()
         mock_presentations = MagicMock()
         mock_get = MagicMock()
-        mock_execute = MagicMock(return_value={"presentationId": "test-id", "slides": []})
+        mock_execute = MagicMock(
+            return_value={"presentationId": "test-id", "slides": []}
+        )
 
         mock_build.return_value = mock_service
         mock_service.presentations.return_value = mock_presentations
@@ -386,7 +402,6 @@ class TestGSlidesAPI:
 
         # Check that no rate limit logs were emitted (tokens available immediately)
         rate_limit_logs = [
-            record for record in caplog.records
-            if "Rate limit" in record.message
+            record for record in caplog.records if "Rate limit" in record.message
         ]
         assert len(rate_limit_logs) == 0

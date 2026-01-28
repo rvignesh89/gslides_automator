@@ -25,7 +25,9 @@ class TestGSheetsAPI:
         mock_service = MagicMock()
         mock_spreadsheets = MagicMock()
         mock_get = MagicMock()
-        mock_execute = MagicMock(return_value={"spreadsheetId": "test-id", "sheets": []})
+        mock_execute = MagicMock(
+            return_value={"spreadsheetId": "test-id", "sheets": []}
+        )
 
         mock_build.return_value = mock_service
         mock_service.spreadsheets.return_value = mock_spreadsheets
@@ -66,7 +68,9 @@ class TestGSheetsAPI:
 
         # Verify
         assert result == {"values": [["A1", "B1"], ["A2", "B2"]]}
-        mock_values.get.assert_called_once_with(spreadsheetId="test-id", range="Sheet1!A1:B2")
+        mock_values.get.assert_called_once_with(
+            spreadsheetId="test-id", range="Sheet1!A1:B2"
+        )
 
     @patch("gslides_automator.gsheets_api.build")
     def test_update_values(self, mock_build):
@@ -150,7 +154,9 @@ class TestGSheetsAPI:
 
         # Verify
         assert result == {"replies": []}
-        mock_spreadsheets.batchUpdate.assert_called_once_with(spreadsheetId="test-id", body=body)
+        mock_spreadsheets.batchUpdate.assert_called_once_with(
+            spreadsheetId="test-id", body=body
+        )
 
     @patch("gslides_automator.gsheets_api.build")
     def test_429_error_retry(self, mock_build):
@@ -246,7 +252,9 @@ class TestGSheetsAPI:
         mock_service = MagicMock()
         mock_spreadsheets = MagicMock()
         mock_get = MagicMock()
-        mock_execute = MagicMock(return_value={"spreadsheetId": "test-id", "sheets": []})
+        mock_execute = MagicMock(
+            return_value={"spreadsheetId": "test-id", "sheets": []}
+        )
 
         mock_build.return_value = mock_service
         mock_service.spreadsheets.return_value = mock_spreadsheets
@@ -280,7 +288,9 @@ class TestGSheetsAPI:
         mock_service = MagicMock()
         mock_spreadsheets = MagicMock()
         mock_get = MagicMock()
-        mock_execute = MagicMock(return_value={"spreadsheetId": "test-id", "sheets": []})
+        mock_execute = MagicMock(
+            return_value={"spreadsheetId": "test-id", "sheets": []}
+        )
 
         mock_build.return_value = mock_service
         mock_service.spreadsheets.return_value = mock_spreadsheets
@@ -301,8 +311,14 @@ class TestGSheetsAPI:
             api.get_spreadsheet("test-id")
 
         # Check that debug logs were emitted for the second call
-        assert any("Rate limit - waiting" in record.message and "read" in record.message for record in caplog.records)
-        assert any("Rate limit - read operation allowed" in record.message for record in caplog.records)
+        assert any(
+            "Rate limit - waiting" in record.message and "read" in record.message
+            for record in caplog.records
+        )
+        assert any(
+            "Rate limit - read operation allowed" in record.message
+            for record in caplog.records
+        )
 
     @patch("gslides_automator.gsheets_api.build")
     def test_no_logging_when_no_rate_limit(self, mock_build, caplog):
@@ -311,7 +327,9 @@ class TestGSheetsAPI:
         mock_service = MagicMock()
         mock_spreadsheets = MagicMock()
         mock_get = MagicMock()
-        mock_execute = MagicMock(return_value={"spreadsheetId": "test-id", "sheets": []})
+        mock_execute = MagicMock(
+            return_value={"spreadsheetId": "test-id", "sheets": []}
+        )
 
         mock_build.return_value = mock_service
         mock_service.spreadsheets.return_value = mock_spreadsheets
@@ -327,7 +345,6 @@ class TestGSheetsAPI:
 
         # Check that no rate limit logs were emitted (tokens available immediately)
         rate_limit_logs = [
-            record for record in caplog.records
-            if "Rate limit" in record.message
+            record for record in caplog.records if "Rate limit" in record.message
         ]
         assert len(rate_limit_logs) == 0
