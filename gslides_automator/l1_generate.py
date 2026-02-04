@@ -146,8 +146,9 @@ def find_or_create_entity_folder(drive_api, entity_name, parent_folder_id):
         str: Folder ID, or None if failed
     """
     try:
-        # Try to find existing folder
-        query = f"mimeType='application/vnd.google-apps.folder' and name='{entity_name}' and '{parent_folder_id}' in parents and trashed=false"
+        # List all folders in parent folder (Google Drive search is case-insensitive,
+        # so we filter in Python for case-sensitive matching)
+        query = f"mimeType='application/vnd.google-apps.folder' and '{parent_folder_id}' in parents and trashed=false"
         results = drive_api.list_files(
             query=query,
             fields="files(id, name)",
@@ -155,8 +156,10 @@ def find_or_create_entity_folder(drive_api, entity_name, parent_folder_id):
             includeItemsFromAllDrives=True,
         )
         files = results.get("files", [])
-        if files:
-            return files[0]["id"]
+        # Filter for exact case-sensitive match
+        for file in files:
+            if file.get("name") == entity_name:
+                return file["id"]
 
         # Create new folder if not found
         file_metadata = {
